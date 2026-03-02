@@ -39,7 +39,8 @@ async def lifespan(application: FastAPI):
     print(f"[Cerebro] Models directory: {models_dir}")
 
     # Auto-load last model in background so the server starts immediately
-    asyncio.create_task(auto_load_last_model(models_dir))
+    # Store reference to prevent garbage collection of the task
+    application.state._auto_load_task = asyncio.create_task(auto_load_last_model(models_dir))
 
     yield
 

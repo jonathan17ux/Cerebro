@@ -247,13 +247,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     (content: string) => {
       // ── Guard: require a usable model before doing anything ──
       const sel = selectedModelRef.current;
-      const localReady = engineStatusRef.current.state === 'ready';
+      const engineState = engineStatusRef.current.state;
+      const localReady = engineState === 'ready';
+      const localLoading = engineState === 'loading';
       let modelUsable = false;
 
       if (sel) {
         if (sel.source === 'local') {
-          // Local model: engine must be ready
-          modelUsable = localReady;
+          // Local model: engine must be ready or actively loading (auto-load on startup)
+          modelUsable = localReady || localLoading;
         } else if (sel.source === 'cloud' && sel.provider) {
           // Cloud model: provider must have a key configured
           const cs = connectionStatusRef.current[sel.provider];
@@ -261,8 +263,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Fallback: even if selected_model is stale, a loaded local model is usable
-      if (!modelUsable && localReady) {
+      // Fallback: even if selected_model is stale, a loaded/loading local model is usable
+      if (!modelUsable && (localReady || localLoading)) {
         modelUsable = true;
       }
 

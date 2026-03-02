@@ -9,7 +9,7 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from database import SessionLocal
+import database
 from models import Setting
 
 from .catalog import (
@@ -53,9 +53,9 @@ LAST_LOADED_MODEL_KEY = "last_loaded_model"
 
 def _persist_loaded_model(model_id: str | None) -> None:
     """Save or clear the last-loaded model setting in the DB."""
-    if SessionLocal is None:
+    if database.SessionLocal is None:
         return
-    db = SessionLocal()
+    db = database.SessionLocal()
     try:
         setting = db.get(Setting, LAST_LOADED_MODEL_KEY)
         if model_id:
@@ -64,20 +64,22 @@ def _persist_loaded_model(model_id: str | None) -> None:
             else:
                 db.add(Setting(key=LAST_LOADED_MODEL_KEY, value=model_id))
             db.commit()
+            print(f"[Cerebro] Persisted last loaded model: {model_id}")
         else:
             if setting:
                 db.delete(setting)
                 db.commit()
+            print("[Cerebro] Cleared last loaded model setting")
     finally:
         db.close()
 
 
 async def auto_load_last_model(models_dir: str) -> None:
     """If a model was loaded last session, reload it automatically."""
-    if _inference_engine is None or SessionLocal is None:
+    if _inference_engine is None or database.SessionLocal is None:
         return
 
-    db = SessionLocal()
+    db = database.SessionLocal()
     try:
         setting = db.get(Setting, LAST_LOADED_MODEL_KEY)
         if not setting:
