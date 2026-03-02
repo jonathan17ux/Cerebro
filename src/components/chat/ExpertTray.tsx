@@ -3,8 +3,8 @@
  * Click to select which expert handles the next message.
  */
 
-import { useEffect } from 'react';
-import { Bot } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
+import { Bot, Pin } from 'lucide-react';
 import clsx from 'clsx';
 import { useExperts } from '../../context/ExpertContext';
 import { useChat } from '../../context/ChatContext';
@@ -17,7 +17,13 @@ export default function ExpertTray() {
     loadExperts();
   }, [loadExperts]);
 
-  const enabledExperts = experts.filter((e) => e.isEnabled && e.type === 'expert');
+  const enabledExperts = useMemo(
+    () =>
+      experts
+        .filter((e) => e.isEnabled && e.type === 'expert')
+        .sort((a, b) => (a.isPinned === b.isPinned ? 0 : a.isPinned ? -1 : 1)),
+    [experts],
+  );
 
   // Don't show if no experts exist
   if (enabledExperts.length === 0) return null;
@@ -52,6 +58,7 @@ export default function ExpertTray() {
               : 'bg-bg-elevated text-text-tertiary border border-transparent hover:text-text-secondary hover:bg-bg-hover',
           )}
         >
+          {expert.isPinned && <Pin size={8} className="text-accent flex-shrink-0" />}
           <div
             className={clsx(
               'w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold',

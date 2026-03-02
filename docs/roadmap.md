@@ -36,8 +36,9 @@
 | Expert selector tray in Chat | Done |
 | Expert-scoped memory and context | Done |
 | Web search agent tool (search API integration for grounded answers) | Done |
-| Expert management (enable, disable, pin) | Not Started |
+| Expert management (enable, disable, pin) | Done |
 | Built-in starter experts templates (only Fitness Coach (Workout Expert) for v0) | Not Started |
+| Add full support for image understanding | Not Started |
 | Write test plan and automated test cases | Not Started |
 | **5. Execution Engine** | |
 | Action interface (connectors, channels, transformers, model calls) | Not Started |
@@ -109,3 +110,6 @@
 | Contextual tooltips for key features on first visit | Not Started |
 | **V1** | |
 | HuggingFace Inference API integration | Not Started |
+| Brave Search integration for tool calling | Not Started |
+| Add full support for audio understanding | Not Started |
+| Add full support for video understanding | Not Started |

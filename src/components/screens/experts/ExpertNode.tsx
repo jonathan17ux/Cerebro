@@ -1,4 +1,4 @@
-import { Brain, Bot, Users } from 'lucide-react';
+import { Brain, Bot, Users, Pin } from 'lucide-react';
 import clsx from 'clsx';
 import type { Expert } from '../../../context/ExpertContext';
 
@@ -65,6 +65,7 @@ interface ExpertNodeProps {
   y: number;
   index: number;
   onClick: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 export default function ExpertNode({
@@ -75,6 +76,7 @@ export default function ExpertNode({
   y,
   index,
   onClick,
+  onContextMenu,
 }: ExpertNodeProps) {
   const glow = getGlow(expert?.domain ?? null, !!isCerebro);
   const isEnabled = expert?.isEnabled ?? true;
@@ -98,10 +100,11 @@ export default function ExpertNode({
         e.stopPropagation();
         onClick();
       }}
+      onContextMenu={onContextMenu}
     >
       {/* Icon box with colored glow border */}
       <div
-        className="rounded-xl flex items-center justify-center transition-shadow duration-200"
+        className="relative rounded-xl flex items-center justify-center transition-shadow duration-200"
         style={{
           width: boxSize,
           height: boxSize,
@@ -118,6 +121,13 @@ export default function ExpertNode({
           <Users size={iconSize} style={{ color: glow.color }} />
         ) : (
           <Bot size={iconSize} style={{ color: glow.color }} />
+        )}
+
+        {/* Pin badge */}
+        {!isCerebro && expert?.isPinned && (
+          <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-bg-base border border-border-subtle flex items-center justify-center">
+            <Pin size={10} className="text-accent" />
+          </div>
         )}
       </div>
 

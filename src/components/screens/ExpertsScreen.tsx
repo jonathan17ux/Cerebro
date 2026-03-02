@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { Plus, ZoomIn, ZoomOut, Maximize2, Loader2 } from 'lucide-react';
+import clsx from 'clsx';
 import { useExperts, type Expert, type CreateExpertInput } from '../../context/ExpertContext';
 import ExpertNode from './experts/ExpertNode';
 import ExpertDetailPanel from './experts/ExpertDetailPanel';
 import CreateExpertDialog from './experts/CreateExpertDialog';
+import ExpertContextMenu from './experts/ExpertContextMenu';
 
 // ── Layout Constants ───────────────────────────────────────────
 
@@ -183,6 +185,8 @@ export default function ExpertsScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ expert: Expert; position: { x: number; y: number } } | null>(null);
+  const [filter, setFilter] = useState<'all' | 'active' | 'disabled' | 'pinned'>('all');
 
   useEffect(() => {
     loadExperts();
@@ -197,8 +201,20 @@ export default function ExpertsScreen() {
     }
   }, [initialized]);
 
-  // Recompute layout when experts change
-  const layout = useMemo(() => computeLayout(experts), [experts]);
+  // Filter experts based on active filter
+  const filteredExperts = useMemo(() => {
+    switch (filter) {
+      case 'active': return experts.filter((e) => e.isEnabled);
+      case 'disabled': return experts.filter((e) => !e.isEnabled);
+      case 'pinned': return experts.filter((e) => e.isPinned);
+      default: return experts;
+    }
+  }, [experts, filter]);
+
+  const disabledCount = useMemo(() => experts.filter((e) => !e.isEnabled).length, [experts]);
+
+  // Recompute layout when filtered experts change
+  const layout = useMemo(() => computeLayout(filteredExperts), [filteredExperts]);
 
   // Selected expert lookup
   const selectedExpert =
@@ -251,6 +267,25 @@ export default function ExpertsScreen() {
   const handleNodeClick = useCallback((id: string) => {
     setSelectedId((prev) => (prev === id ? null : id));
   }, []);
+
+  // ── Context menu ──
+
+  const handleContextMenu = useCallback(
+    (expert: Expert, e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setContextMenu({ expert, position: { x: e.clientX, y: e.clientY } });
+    },
+    [],
+  );
+
+  const handleContextMenuDelete = useCallback(
+    async (id: string) => {
+      setSelectedId((prev) => (prev === id ? null : prev));
+      await deleteExpert(id);
+    },
+    [deleteExpert],
+  );
 
   // ── Zoom controls ──
 
@@ -383,6 +418,11 @@ export default function ExpertsScreen() {
               y={node.y}
               index={node.index}
               onClick={() => handleNodeClick(node.id)}
+              onContextMenu={
+                !node.isCerebro && node.expert
+                  ? (e) => handleContextMenu(node.expert!, e)
+                  : undefined
+              }
             />
           ))}
 
@@ -427,11 +467,27 @@ export default function ExpertsScreen() {
         </div>
       </div>
 
-      {/* ─── Top-left info ─── */}
-      <div className="canvas-toolbar absolute top-4 left-4 flex items-center gap-3">
-        <span className="text-[11px] text-text-tertiary">
-          {activeCount} active &middot; {pinnedCount} pinned
-        </span>
+      {/* ─── Top-left filter pills ─── */}
+      <div className="canvas-toolbar absolute top-4 left-4 flex items-center gap-1.5">
+        {([
+          { key: 'all' as const, label: 'All', count: experts.length },
+          { key: 'active' as const, label: 'Active', count: activeCount },
+          { key: 'disabled' as const, label: 'Disabled', count: disabledCount },
+          { key: 'pinned' as const, label: 'Pinned', count: pinnedCount },
+        ]).map((pill) => (
+          <button
+            key={pill.key}
+            onClick={() => setFilter(pill.key)}
+            className={clsx(
+              'px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors duration-150',
+              filter === pill.key
+                ? 'bg-accent/15 text-accent border border-accent/30'
+                : 'bg-bg-surface/80 text-text-tertiary border border-transparent hover:text-text-secondary hover:bg-bg-hover',
+            )}
+          >
+            {pill.label} ({pill.count})
+          </button>
+        ))}
       </div>
 
       {/* ─── Top-right action ─── */}
@@ -497,6 +553,18 @@ export default function ExpertsScreen() {
         onCreate={handleCreate}
         experts={experts}
       />
+
+      {/* ─── Context Menu ─── */}
+      {contextMenu && (
+        <ExpertContextMenu
+          expert={contextMenu.expert}
+          position={contextMenu.position}
+          onClose={() => setContextMenu(null)}
+          onToggleEnabled={toggleEnabled}
+          onTogglePinned={togglePinned}
+          onDelete={handleContextMenuDelete}
+        />
+      )}
     </div>
   );
 }
