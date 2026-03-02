@@ -9,6 +9,9 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from database import SessionLocal
+from models import Setting
+
 from .catalog import (
     detect_hardware,
     get_catalog,
@@ -43,6 +46,64 @@ def init_singletons() -> None:
     global _download_manager, _inference_engine
     _download_manager = DownloadManager()
     _inference_engine = InferenceEngine()
+
+
+LAST_LOADED_MODEL_KEY = "last_loaded_model"
+
+
+def _persist_loaded_model(model_id: str | None) -> None:
+    """Save or clear the last-loaded model setting in the DB."""
+    if SessionLocal is None:
+        return
+    db = SessionLocal()
+    try:
+        setting = db.get(Setting, LAST_LOADED_MODEL_KEY)
+        if model_id:
+            if setting:
+                setting.value = model_id
+            else:
+                db.add(Setting(key=LAST_LOADED_MODEL_KEY, value=model_id))
+            db.commit()
+        else:
+            if setting:
+                db.delete(setting)
+                db.commit()
+    finally:
+        db.close()
+
+
+async def auto_load_last_model(models_dir: str) -> None:
+    """If a model was loaded last session, reload it automatically."""
+    if _inference_engine is None or SessionLocal is None:
+        return
+
+    db = SessionLocal()
+    try:
+        setting = db.get(Setting, LAST_LOADED_MODEL_KEY)
+        if not setting:
+            return
+        model_id = setting.value
+    finally:
+        db.close()
+
+    entry = get_catalog_entry(model_id)
+    if entry is None:
+        return
+
+    state = get_model_state(models_dir, model_id)
+    if state.get("status") != "downloaded":
+        return
+
+    file_path = state.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        return
+
+    print(f"[Cerebro] Auto-loading last model: {entry['name']} ({model_id})")
+    try:
+        await _inference_engine.load_model(model_id=model_id, model_path=file_path)
+        print(f"[Cerebro] Model loaded: {entry['name']}")
+    except Exception as e:
+        print(f"[Cerebro] Failed to auto-load model: {e}")
 
 
 def get_models_dir(request: Request) -> str:
@@ -212,6 +273,7 @@ async def load_model(model_id: str, request: Request, body: LoadModelRequest | N
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load model: {e}")
 
+    _persist_loaded_model(model_id)
     return {"ok": True, "model_id": model_id, "message": f"{entry['name']} loaded"}
 
 
@@ -221,6 +283,7 @@ async def unload_model():
         raise HTTPException(status_code=500, detail="Inference engine not initialized")
 
     await _inference_engine.unload_model()
+    _persist_loaded_model(None)
     return {"ok": True, "message": "Model unloaded"}
 
 

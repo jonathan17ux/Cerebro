@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -16,7 +17,7 @@ import models  # noqa: F401
 from models import Conversation, Message, Setting
 
 from local_models.catalog import recover_interrupted
-from local_models.router import init_singletons
+from local_models.router import auto_load_last_model, init_singletons
 from local_models.router import router as models_router
 from cloud_providers.router import router as cloud_router
 from memory.router import router as memory_router
@@ -36,6 +37,9 @@ async def lifespan(application: FastAPI):
     recover_interrupted(models_dir)
     init_singletons()
     print(f"[Cerebro] Models directory: {models_dir}")
+
+    # Auto-load last model in background so the server starts immediately
+    asyncio.create_task(auto_load_last_model(models_dir))
 
     yield
 
