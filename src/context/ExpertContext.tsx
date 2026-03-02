@@ -40,6 +40,8 @@ export interface CreateExpertInput {
   name: string;
   description: string;
   domain?: string;
+  type?: ExpertType;
+  teamMembers?: Array<{ expertId: string; role: string; order: number }>;
 }
 
 // ── API response types (snake_case) ────────────────────────────
@@ -102,6 +104,14 @@ function toApiBody(input: CreateExpertInput): Record<string, unknown> {
     description: input.description,
   };
   if (input.domain) body.domain = input.domain;
+  if (input.type) body.type = input.type;
+  if (input.teamMembers && input.teamMembers.length > 0) {
+    body.team_members = input.teamMembers.map((m) => ({
+      expert_id: m.expertId,
+      role: m.role,
+      order: m.order,
+    }));
+  }
   return body;
 }
 

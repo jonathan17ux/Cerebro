@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Copy, Check, Trash2 } from 'lucide-react';
+import { X, Copy, Check, Trash2, UserPlus, XCircle, Users } from 'lucide-react';
 import clsx from 'clsx';
 import type { Expert } from '../../../context/ExpertContext';
 
@@ -54,6 +54,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: () => void 
 interface ExpertDetailPanelProps {
   expert: Expert | null;
   isCerebro?: boolean;
+  allExperts: Expert[];
   onClose: () => void;
   onUpdate: (id: string, fields: Record<string, unknown>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -66,6 +67,7 @@ interface ExpertDetailPanelProps {
 export default function ExpertDetailPanel({
   expert,
   isCerebro,
+  allExperts,
   onClose,
   onUpdate,
   onDelete,
@@ -79,6 +81,7 @@ export default function ExpertDetailPanel({
   const [domain, setDomain] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
   const [copied, setCopied] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false);
 
   useEffect(() => {
     if (expert) {
@@ -86,8 +89,36 @@ export default function ExpertDetailPanel({
       setDescription(expert.description);
       setDomain(expert.domain ?? '');
       setSystemPrompt(expert.systemPrompt ?? '');
+      setShowAddMember(false);
     }
   }, [expert?.id, expert?.name, expert?.description, expert?.domain, expert?.systemPrompt]);
+
+  // Team member helpers
+  const isTeam = expert?.type === 'team';
+  const memberIds = new Set(expert?.teamMembers?.map((m) => m.expertId) ?? []);
+  const currentMembers = allExperts.filter((e) => memberIds.has(e.id));
+  const addableExperts = allExperts.filter(
+    (e) => e.type === 'expert' && !memberIds.has(e.id) && e.id !== expert?.id,
+  );
+
+  const addMember = (memberId: string) => {
+    if (!expert) return;
+    const existing = expert.teamMembers ?? [];
+    const updated = [
+      ...existing.map((m) => ({ expert_id: m.expertId, role: m.role, order: m.order })),
+      { expert_id: memberId, role: 'member', order: existing.length },
+    ];
+    onUpdate(expert.id, { team_members: updated });
+    setShowAddMember(false);
+  };
+
+  const removeMember = (memberId: string) => {
+    if (!expert) return;
+    const updated = (expert.teamMembers ?? [])
+      .filter((m) => m.expertId !== memberId)
+      .map((m, i) => ({ expert_id: m.expertId, role: m.role, order: i }));
+    onUpdate(expert.id, { team_members: updated });
+  };
 
   const saveField = (snakeField: string, value: unknown) => {
     if (expert) onUpdate(expert.id, { [snakeField]: value });
@@ -224,6 +255,75 @@ export default function ExpertDetailPanel({
                 </div>
               </div>
             </Section>
+
+            {/* Team Members (only for teams) */}
+            {isTeam && (
+              <Section label="TEAM MEMBERS">
+                {currentMembers.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {currentMembers.map((member) => (
+                      <div
+                        key={member.id}
+                        className="flex items-center gap-2.5 bg-bg-base rounded-lg px-3 py-2 border border-border-subtle group"
+                      >
+                        <Users size={13} className="text-text-tertiary flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-text-primary truncate">
+                            {member.name}
+                          </div>
+                          {member.domain && (
+                            <div className="text-[10px] text-text-tertiary capitalize">
+                              {member.domain}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => removeMember(member.id)}
+                          className="p-0.5 text-text-tertiary opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all"
+                          title="Remove from team"
+                        >
+                          <XCircle size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-text-tertiary">No members yet.</p>
+                )}
+
+                {/* Add member */}
+                {showAddMember ? (
+                  <div className="mt-2 bg-bg-base rounded-lg border border-border-subtle max-h-36 overflow-y-auto scrollbar-thin">
+                    {addableExperts.length === 0 ? (
+                      <p className="text-xs text-text-tertiary px-3 py-2.5">
+                        No available experts to add.
+                      </p>
+                    ) : (
+                      addableExperts.map((exp) => (
+                        <button
+                          key={exp.id}
+                          onClick={() => addMember(exp.id)}
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-bg-hover transition-colors"
+                        >
+                          <UserPlus size={12} className="text-accent flex-shrink-0" />
+                          <span className="text-xs text-text-secondary truncate">
+                            {exp.name}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowAddMember(true)}
+                    className="mt-2 flex items-center gap-1.5 text-xs text-accent hover:text-accent-hover transition-colors"
+                  >
+                    <UserPlus size={13} />
+                    Add Member
+                  </button>
+                )}
+              </Section>
+            )}
 
             {/* System Prompt */}
             <Section label="SYSTEM CONTEXT">

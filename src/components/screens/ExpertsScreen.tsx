@@ -473,6 +473,7 @@ export default function ExpertsScreen() {
         <ExpertDetailPanel
           expert={selectedExpert}
           isCerebro={isCerebroSelected}
+          allExperts={experts}
           onClose={() => setSelectedId(null)}
           onUpdate={handleUpdate}
           onDelete={handleDelete}
@@ -488,6 +489,7 @@ export default function ExpertsScreen() {
         isOpen={showCreate}
         onClose={() => setShowCreate(false)}
         onCreate={handleCreate}
+        experts={experts}
       />
     </div>
   );
