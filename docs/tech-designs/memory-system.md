@@ -2,11 +2,11 @@
 
 ## Problem Statement
 
-Every Cerebro conversation starts from zero. The AI has no knowledge of who the user is, what they care about, or how they like to communicate. Users re-explain themselves constantly — their role, preferences, ongoing projects, tone expectations.
+Every AI assistant today starts every conversation from zero. The AI has no knowledge of who the user is, what they care about, or how they like to communicate. Users re-explain themselves constantly — their role, preferences, ongoing projects, tone expectations. This is the highest-friction experience in any AI product, and no mainstream assistant solves it.
 
-But knowing *who the user is* isn't enough. A running coach that knows "User is training for a marathon" but can't see their run logs, training plan adherence, or weekly mileage is useless. Real experts need **ongoing domain knowledge** — structured records that accumulate from connected services and conversations, enabling coaching, trend analysis, and plan tracking across sessions.
+But knowing *who the user is* isn't enough. A running coach that knows "User is training for a marathon" but can't see their run logs, training plan adherence, or weekly mileage is useless. Real experts need **ongoing domain knowledge** — structured records that accumulate from connected services and conversations, enabling coaching, trend analysis, and plan tracking across sessions. Existing AI assistants have no concept of this.
 
-Memory is also foundational infrastructure. Experts (roadmap #4) and Routines (#6) each require scoped memory. Building the memory layer now with extensible scoping means those features plug in cleanly later.
+Cerebro's Memory system eliminates both problems. It gives Cerebro persistent, personalized context that accumulates over time — transforming it from a stateless chat box into a personal intelligence platform that knows you and gets better the more you use it. Memory is also foundational infrastructure: Experts (roadmap #4) and Routines (#6) each require scoped memory. Building the memory layer with extensible scoping means those features plug in cleanly later.
 
 ## Design Principles
 
