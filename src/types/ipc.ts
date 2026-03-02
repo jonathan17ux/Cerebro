@@ -18,6 +18,12 @@ export const IPC_CHANNELS = {
   // Models
   MODELS_GET_DIR: 'models:get-dir',
   MODELS_DISK_SPACE: 'models:disk-space',
+
+  // Agent system
+  AGENT_RUN: 'agent:run',
+  AGENT_CANCEL: 'agent:cancel',
+  AGENT_ACTIVE_RUNS: 'agent:active-runs',
+  agentEvent: (runId: string) => `agent:event:${runId}`,
 } as const;
 
 // --- Backend Request/Response ---

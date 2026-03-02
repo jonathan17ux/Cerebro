@@ -21,6 +21,7 @@ from local_models.router import router as models_router
 from cloud_providers.router import router as cloud_router
 from memory.router import router as memory_router
 from experts.router import router as experts_router
+from agent_runs.router import router as agent_runs_router
 
 
 @asynccontextmanager
@@ -44,6 +45,7 @@ app.include_router(models_router, prefix="/models")
 app.include_router(cloud_router, prefix="/cloud")
 app.include_router(memory_router, prefix="/memory")
 app.include_router(experts_router, prefix="/experts")
+app.include_router(agent_runs_router, prefix="/agent-runs")
 
 
 @app.get("/health")
@@ -91,6 +93,8 @@ class MessageCreate(BaseModel):
     content: str
     model: str | None = None
     token_count: int | None = None
+    expert_id: str | None = None
+    agent_run_id: str | None = None
 
 
 class MessageResponse(BaseModel):
@@ -100,6 +104,8 @@ class MessageResponse(BaseModel):
     content: str
     model: str | None
     token_count: int | None
+    expert_id: str | None = None
+    agent_run_id: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -196,6 +202,8 @@ def create_message(conv_id: str, body: MessageCreate, db=Depends(get_db)):
         content=body.content,
         model=body.model,
         token_count=body.token_count,
+        expert_id=body.expert_id,
+        agent_run_id=body.agent_run_id,
     )
     db.add(msg)
     conv.updated_at = models._utcnow()

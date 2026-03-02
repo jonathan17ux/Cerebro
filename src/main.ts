@@ -25,6 +25,8 @@ import {
   clearCredentials,
   listCredentials,
 } from './credentials';
+import { AgentRuntime } from './agents';
+import type { AgentRunRequest } from './agents';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -49,6 +51,9 @@ const MAX_RESTARTS = 3;
 
 // Active SSE streams (streamId → http.ClientRequest)
 const activeStreams = new Map<string, http.ClientRequest>();
+
+// Agent runtime (initialized after backend is healthy)
+let agentRuntime: AgentRuntime | null = null;
 
 // --- Utility functions ---
 
@@ -177,6 +182,7 @@ async function startPythonBackend(): Promise<void> {
 
   await waitForHealthCheck(port);
   backendStatus = 'healthy';
+  agentRuntime = new AgentRuntime(port);
   console.log(`[Cerebro] Python backend is ready on port ${port}`);
 }
 
@@ -484,6 +490,25 @@ function registerIpcHandlers(): void {
       free: stats.bfree * stats.bsize,
       total: stats.blocks * stats.bsize,
     };
+  });
+
+  // --- Agent System ---
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_RUN, async (event, request: AgentRunRequest) => {
+    if (!agentRuntime) {
+      throw new Error('Agent runtime not initialized');
+    }
+    return agentRuntime.startRun(event.sender, request);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_CANCEL, async (_event, runId: string) => {
+    if (!agentRuntime) return false;
+    return agentRuntime.cancelRun(runId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_ACTIVE_RUNS, async () => {
+    if (!agentRuntime) return [];
+    return agentRuntime.getActiveRuns();
   });
 }
 

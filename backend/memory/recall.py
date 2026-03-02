@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from models import KnowledgeEntry, MemoryItem, Setting
+from models import Expert, KnowledgeEntry, MemoryItem, Setting
 
 from .schemas import MemoryContextResponse
 
@@ -129,8 +129,15 @@ async def assemble_system_prompt(
     sections: list[str] = []
     context_files_used: list[str] = []
 
-    # 1. Base Cerebro personality
-    sections.append(BASE_SYSTEM_PROMPT)
+    # 1. Base personality — use expert's system_prompt when expert-scoped
+    if scope == "expert" and scope_id:
+        expert = db.get(Expert, scope_id)
+        if expert and expert.system_prompt:
+            sections.append(expert.system_prompt)
+        else:
+            sections.append(BASE_SYSTEM_PROMPT)
+    else:
+        sections.append(BASE_SYSTEM_PROMPT)
 
     # 2. Profile context file
     profile = db.get(Setting, "memory:context:profile")

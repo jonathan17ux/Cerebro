@@ -33,6 +33,13 @@ class MemoryItemResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MemoryItemCreate(BaseModel):
+    scope: str = "personal"
+    scope_id: str | None = None
+    content: str
+    source_conversation_id: str | None = None
+
+
 class MemoryItemsListResponse(BaseModel):
     items: list[MemoryItemResponse]
     total: int

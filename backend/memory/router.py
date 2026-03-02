@@ -20,6 +20,7 @@ from .schemas import (
     KnowledgeEntryResponse,
     MemoryContextRequest,
     MemoryContextResponse,
+    MemoryItemCreate,
     MemoryItemResponse,
     MemoryItemsListResponse,
 )
@@ -123,6 +124,30 @@ def list_memory_items(
         items=[MemoryItemResponse.model_validate(item) for item in items],
         total=total,
     )
+
+
+@router.post("/items", response_model=MemoryItemResponse, status_code=201)
+def create_memory_item(body: MemoryItemCreate, db=Depends(get_db)):
+    item = MemoryItem(
+        id=_uuid_hex(),
+        scope=body.scope,
+        scope_id=body.scope_id,
+        content=body.content,
+        source_conversation_id=body.source_conversation_id,
+    )
+    # Compute embedding
+    try:
+        from .embeddings import get_embedder
+        import numpy as np
+        embedder = get_embedder()
+        vec = embedder.embed(body.content)
+        item.embedding = vec.astype(np.float32).tobytes()
+    except Exception:
+        pass  # Embedding is optional
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return MemoryItemResponse.model_validate(item)
 
 
 @router.delete("/items/{item_id}", status_code=204)
