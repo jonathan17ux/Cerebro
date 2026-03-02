@@ -57,6 +57,7 @@
 | Cerebro system prompt architecture (role definition, tool registry, context/memory injection) | Not Started |
 | Agent conversation loop (message → LLM → tool calls → response agentic cycle) | Not Started |
 | Expert/team proposal and vibe engineering (propose → preview → add expert) | Not Started |
+| Team orchestration tech design and implementation (coordinator agent, delegation, fan-out) | Not Started |
 | Run initiation and orchestration (start runs, stream events to UI, produce Run Records) | Not Started |
 | **8. Activity + Approvals** | |
 | Activity screen (run timeline with filters) | Not Started |

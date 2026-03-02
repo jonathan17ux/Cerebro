@@ -723,64 +723,45 @@ The selector only shows models that have valid credentials configured. The dropd
 
 ## Per-Expert Memory
 
-### Memory Scoping (Using Existing Infrastructure)
+The memory system (see [memory-system.md](memory-system.md)) already supports expert scoping — no schema changes or new endpoints needed. All three tiers work with `scope="expert"` and `scope_id=expertId` today:
 
-The memory system already supports scoping via `scope` + `scope_id` fields on both `memory_items` and `knowledge_entries` tables. Expert-scoped memory requires zero schema migration — only behavioral changes.
+- **Context files:** `PUT /memory/context-files/expert:{id}` — already supported in router.py
+- **Learned facts:** `GET /memory/items?scope=expert&scope_id=X` — already scoped
+- **Knowledge entries:** `GET /memory/knowledge?scope=expert&scope_id=X` — already scoped
+- **System prompt assembly:** `POST /memory/context` with `scope="expert"` — already injects expert context file, scoped facts, and scoped knowledge
+- **Extraction:** `POST /memory/extract` with `scope="expert"` — already stores with expert scope
 
-| Scope | scope_id | What's stored | When used |
-|-------|----------|---------------|-----------|
-| `personal` | `NULL` | User-wide facts and entries | Default agent (no expert selected) |
-| `expert` | Expert ID | Domain-specific facts and entries | Expert agent runs |
-| `team` | Team ID | Shared context across team members | Future: team orchestration |
+The agent runtime just passes the right scope params when calling these existing endpoints. When an expert agent runs, the `AgentRuntime` calls `POST /memory/context` with `scope="expert"` and `scope_id=expertId` to get the system prompt, and `POST /memory/extract` with the same scope after the run completes.
 
-**Context files** use the `memory:context:expert:{id}` key pattern (already designed in the memory system):
+### One Change: Expert System Prompt Injection
 
-```python
-# Key examples
-"memory:context:profile"           # Global — always injected
-"memory:context:style"             # Global — always injected
-"memory:context:expert:a1b2c3"     # Expert-specific — injected when this expert runs
-```
-
-### System Prompt Assembly Changes
-
-`recall.py` needs two changes for expert-scoped agents:
-
-1. **Inject the expert's `system_prompt` field** as the base prompt instead of the generic Cerebro personality when running in expert scope.
-2. **Include both personal and expert-scoped memory** — an expert should know who the user is (personal profile + style) AND have its own domain knowledge.
+The only modification to the memory system is in `recall.py`. Currently `assemble_system_prompt` always uses `BASE_SYSTEM_PROMPT` as the first section. When `scope="expert"`, it should use the expert's `system_prompt` field instead:
 
 ```python
-# backend/memory/recall.py — modified assemble_system_prompt
+# backend/memory/recall.py — line 133, replace:
+sections.append(BASE_SYSTEM_PROMPT)
 
-async def assemble_system_prompt(
-    recent_messages: list[dict] | None,
-    scope: str,
-    scope_id: str | None,
-    db: Session,
-) -> MemoryContextResponse:
-    sections: list[str] = []
-    context_files_used: list[str] = []
-
-    # 1. Base prompt — expert's system_prompt or Cerebro default
-    if scope == "expert" and scope_id:
-        expert = db.get(Expert, scope_id)
-        if expert and expert.system_prompt:
-            sections.append(expert.system_prompt)
-        else:
-            sections.append(BASE_SYSTEM_PROMPT)
+# with:
+if scope == "expert" and scope_id:
+    expert = db.get(Expert, scope_id)
+    if expert and expert.system_prompt:
+        sections.append(expert.system_prompt)
     else:
         sections.append(BASE_SYSTEM_PROMPT)
-
-    # 2-6. Profile, Style, Expert context file, Learned facts, Knowledge entries
-    # ... (unchanged — already scope-aware) ...
+else:
+    sections.append(BASE_SYSTEM_PROMPT)
 ```
 
-This means a Fitness Coach agent gets:
+After this change, a Fitness Coach agent gets:
 1. Its own system prompt ("You are a running coach who...")
-2. The user's profile and style (personal context files)
+2. The user's profile and style (personal context files — always included)
 3. Its own expert context file (training plan, injury history)
 4. Its own learned facts (`scope="expert"`, `scope_id=coachId`)
 5. Its own knowledge entries (run logs, check-ins)
+
+### Memory Tools (New)
+
+The memory tools defined in the [Tool System](#tool-system) section (`recall_facts`, `recall_knowledge`, `save_fact`, `save_entry`) give agents explicit, mid-conversation access to memory. This is distinct from the automatic injection (system prompt assembly at the start) and automatic extraction (after the run completes) — tools let the agent decide *during its reasoning loop* when to recall or store information.
 
 ## Integration with Existing Systems
 
