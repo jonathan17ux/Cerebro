@@ -364,8 +364,6 @@ function streamFromBackend(
           continue;
         }
 
-        console.log('[StreamFn] SSE event:', JSON.stringify(event).slice(0, 120));
-
         // Handle text tokens (with <think>/<tool_call> tag interception)
         if (event.token) {
           processTextToken(event.token);

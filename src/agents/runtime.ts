@@ -128,8 +128,6 @@ export class AgentRuntime {
     let accumulatedText = '';
 
     const unsubscribe = agent.subscribe((event: AgentEvent) => {
-      console.log(`[Agent:${runId.slice(0, 8)}] event: ${event.type}`, event.type === 'message_update' ? (event as any).assistantMessageEvent?.type : '');
-
       // Track accumulated text for text_delta events
       if (event.type === 'message_update') {
         const ame = (event as any).assistantMessageEvent;
@@ -140,7 +138,6 @@ export class AgentRuntime {
 
       const translated = translateEvent(event, runId, turnCount);
       if (translated) {
-        console.log(`[Agent:${runId.slice(0, 8)}] -> translated: ${translated.type}`);
         if (!webContents.isDestroyed()) {
           webContents.send(channel, translated);
         }

@@ -15,52 +15,15 @@ from .schemas import HardwareInfo, ModelInfo, ModelStatus
 # ── Curated catalog ──────────────────────────────────────────────
 
 CATALOG: list[dict[str, Any]] = [
-    {
-        "id": "gemma-3-4b",
-        "name": "Gemma 3 4B",
-        "family": "Gemma",
-        "variant": "4B-Q4_K_M",
-        "description": "Google's compact 4B model — fast responses with solid quality for everyday tasks.",
-        "tagline": "Fast & lightweight — works on any Mac or PC",
-        "tier": "starter",
-        "size_bytes": 2_680_000_000,  # ~2.5 GB GGUF
-        "context_length": 128_000,
-        "architecture": "dense",
-        "total_params": "4B",
-        "active_params": "4B",
-        "hf_repo": "bartowski/google_gemma-3-4b-it-GGUF",
-        "hf_filename": "google_gemma-3-4b-it-Q4_K_M.gguf",
-        "requires_ram_gb": 8,
-        "recommended_ram_gb": 10,
-        "supports_tools": False,
-    },
-    {
-        "id": "gemma-3-12b",
-        "name": "Gemma 3 12B",
-        "family": "Gemma",
-        "variant": "12B-Q4_K_M",
-        "description": "Google's 12B model — excellent quality-to-size ratio for most tasks.",
-        "tagline": "Great quality for most tasks",
-        "tier": "balanced",
-        "size_bytes": 7_330_000_000,  # ~7 GB GGUF
-        "context_length": 128_000,
-        "architecture": "dense",
-        "total_params": "12B",
-        "active_params": "12B",
-        "hf_repo": "bartowski/google_gemma-3-12b-it-GGUF",
-        "hf_filename": "google_gemma-3-12b-it-Q4_K_M.gguf",
-        "requires_ram_gb": 16,
-        "recommended_ram_gb": 18,
-        "supports_tools": False,
-    },
+    # ── Agent models (tool-capable) — shown first ────────────────
     {
         "id": "qwen3-8b",
         "name": "Qwen 3 8B",
         "family": "Qwen",
         "variant": "8B-Q4_K_M",
         "description": "Alibaba's 8B model with native tool calling — ideal for expert agents.",
-        "tagline": "Tool-capable agent model",
-        "tier": "agent",
+        "tagline": "Tool-capable agent — great starter model",
+        "tier": "starter",
         "size_bytes": 5_000_000_000,  # ~5 GB GGUF
         "context_length": 32_768,
         "architecture": "dense",
@@ -78,8 +41,8 @@ CATALOG: list[dict[str, Any]] = [
         "family": "Mistral",
         "variant": "12B-Q4_K_M",
         "description": "Mistral AI's 12B model with native function calling — multilingual and efficient.",
-        "tagline": "Multilingual agent model",
-        "tier": "agent",
+        "tagline": "Multilingual agent — excellent quality",
+        "tier": "balanced",
         "size_bytes": 7_500_000_000,  # ~7 GB GGUF
         "context_length": 128_000,
         "architecture": "dense",
@@ -274,8 +237,8 @@ def recommend_model(hardware: HardwareInfo) -> str | None:
     ram = hardware.total_ram_gb
     if ram >= 24:
         return "qwen3.5-35b-a3b"
+    elif ram >= 16:
+        return "mistral-nemo-12b"
     elif ram >= 12:
-        return "gemma-3-12b"
-    elif ram >= 8:
-        return "gemma-3-4b"
+        return "qwen3-8b"
     return None

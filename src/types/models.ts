@@ -1,4 +1,4 @@
-export type ModelTier = 'starter' | 'balanced' | 'power';
+export type ModelTier = 'starter' | 'balanced' | 'agent' | 'power';
 export type ModelStatus = 'available' | 'downloading' | 'downloaded' | 'interrupted';
 export type EngineState = 'idle' | 'loading' | 'ready' | 'error';
 export type Architecture = 'dense' | 'moe';
@@ -20,6 +20,7 @@ export interface LocalModel {
   hf_filename: string;
   requires_ram_gb: number;
   recommended_ram_gb: number;
+  supports_tools: boolean;
   status: ModelStatus;
   file_path: string | null;
   sha256: string | null;

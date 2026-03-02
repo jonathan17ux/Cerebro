@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, Loader2, Trash2, Check, RotateCcw, Power, PowerOff } from 'lucide-react';
+import { Download, Loader2, Trash2, Check, RotateCcw, Power, PowerOff, Wrench } from 'lucide-react';
 import clsx from 'clsx';
 import type { LocalModel, DownloadProgress as DownloadProgressType, EngineStatus } from '../../../types/models';
 import type { DiskSpace } from '../../../types/ipc';
@@ -21,6 +21,7 @@ interface LocalModelCardProps {
 const TIER_COLORS: Record<string, string> = {
   starter: 'bg-emerald-500/15 text-emerald-400',
   balanced: 'bg-blue-500/15 text-blue-400',
+  agent: 'bg-cyan-500/15 text-cyan-400',
   power: 'bg-purple-500/15 text-purple-400',
 };
 
@@ -91,6 +92,12 @@ export default function LocalModelCard({
           >
             {model.tier}
           </span>
+          {model.supports_tools && (
+            <span className="flex items-center gap-0.5 text-[10px] font-medium text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">
+              <Wrench size={9} />
+              Tool Use
+            </span>
+          )}
           {isRecommended && (
             <span className="text-[10px] font-medium text-accent bg-accent/10 px-1.5 py-0.5 rounded">
               Recommended
