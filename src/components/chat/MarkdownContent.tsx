@@ -43,15 +43,34 @@ const components: Components = {
   },
 };
 
+/** Strip model-internal tags that shouldn't be shown to the user. */
+function stripModelTags(text: string): string {
+  return text
+    // <think>...</think> reasoning blocks (Qwen, etc.)
+    .replace(/<think>[\s\S]*?<\/think>\s*/g, '')
+    .replace(/<think>[\s\S]*$/g, '')
+    // Orphaned </think> without matching <think> (thinking was in a previous chunk)
+    .replace(/^[\s\S]*?<\/think>\s*/g, '')
+    // <tool_call>...</tool_call> raw tool invocations
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>\s*/g, '')
+    .replace(/<tool_call>[\s\S]*$/g, '')
+    // Orphaned closing tags
+    .replace(/<\/tool_call>\s*/g, '')
+    .replace(/<\/think>\s*/g, '')
+    .trimStart();
+}
+
 interface MarkdownContentProps {
   content: string;
 }
 
 export default function MarkdownContent({ content }: MarkdownContentProps) {
+  const cleaned = stripModelTags(content);
+
   return (
     <div className="prose prose-sm max-w-none">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-        {content}
+        {cleaned}
       </ReactMarkdown>
     </div>
   );

@@ -318,21 +318,31 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             expertId,
           });
 
-          setIsThinking(false);
+          // Keep isThinking true and message.isThinking true until first content arrives
           setIsStreaming(true);
-          updateMessage(convId!, assistantId, { isThinking: false, isStreaming: true });
 
           let accumulated = '';
+          let thinkingCleared = false;
           const toolCalls: ToolCall[] = [];
+
+          const clearThinking = () => {
+            if (!thinkingCleared) {
+              thinkingCleared = true;
+              setIsThinking(false);
+              updateMessage(convId!, assistantId, { isThinking: false, isStreaming: true });
+            }
+          };
 
           const unsub = window.cerebro.agent.onEvent(runId, (event: RendererAgentEvent) => {
             switch (event.type) {
               case 'text_delta':
+                clearThinking();
                 accumulated += event.delta;
                 updateMessage(convId!, assistantId, { content: accumulated });
                 break;
 
               case 'tool_start':
+                clearThinking();
                 toolCalls.push({
                   id: event.toolCallId,
                   name: event.toolName,
@@ -357,9 +367,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
               case 'done':
                 unsub();
+                clearThinking();
                 setIsStreaming(false);
                 updateMessage(convId!, assistantId, {
                   content: event.messageContent || accumulated,
+                  isThinking: false,
                   isStreaming: false,
                   agentRunId: runId,
                 });
@@ -375,8 +387,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
               case 'error': {
                 unsub();
+                clearThinking();
                 setIsStreaming(false);
-                setIsThinking(false);
 
                 const isNoModel =
                   /no model/i.test(event.error) || /not.*available/i.test(event.error);

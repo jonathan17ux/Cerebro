@@ -1,7 +1,6 @@
 import { useRef, useEffect } from 'react';
 import type { Message } from '../../types/chat';
 import ChatMessage from './ChatMessage';
-import ThinkingIndicator from './ThinkingIndicator';
 
 interface MessageListProps {
   messages: Message[];
@@ -22,7 +21,6 @@ export default function MessageList({ messages, isThinking }: MessageListProps) 
         {messages.map((msg) => (
           <ChatMessage key={msg.id} message={msg} />
         ))}
-        {isThinking && <ThinkingIndicator />}
         <div ref={bottomRef} />
       </div>
     </div>

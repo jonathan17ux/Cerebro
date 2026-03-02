@@ -189,6 +189,148 @@ function streamFromBackend(
     let accumulatedText = '';
     let toolCallIndex = 0;
 
+    // ── State machine for text-based tag detection (Qwen-style <think>/<tool_call>) ──
+    let tagMode: 'normal' | 'think' | 'tool_call' = 'normal';
+    let toolCallJsonBuffer = '';
+    let thinkBuffer = '';
+    let pendingChars = '';
+
+    function emitTextDelta(text: string) {
+      if (!text) return;
+      if (accumulatedText === '') {
+        partialContent.push({ type: 'text', text: '' });
+        stream.push({ type: 'text_start', contentIndex, partial: partial as any });
+      }
+      accumulatedText += text;
+      (partialContent[contentIndex] as any).text = accumulatedText;
+      stream.push({ type: 'text_delta', contentIndex, delta: text, partial: partial as any });
+    }
+
+    function emitToolCallFromText(jsonStr: string) {
+      let parsed: { name?: string; arguments?: Record<string, unknown> };
+      try {
+        parsed = JSON.parse(jsonStr);
+      } catch {
+        // Invalid JSON — emit as regular text
+        emitTextDelta(jsonStr);
+        return;
+      }
+
+      // Close open text block before emitting tool call
+      if (accumulatedText !== '') {
+        stream.push({ type: 'text_end', contentIndex, content: accumulatedText, partial: partial as any });
+        contentIndex++;
+        accumulatedText = '';
+      }
+
+      const id = `tc_${Date.now()}_${toolCallIndex}`;
+      const args = parsed.arguments ?? {};
+      const toolCall = {
+        type: 'toolCall' as const,
+        id,
+        name: parsed.name ?? 'unknown',
+        arguments: args,
+      };
+      partialContent.push(toolCall);
+      stream.push({ type: 'toolcall_start', contentIndex, partial: partial as any });
+      stream.push({ type: 'toolcall_delta', contentIndex, delta: JSON.stringify(args), partial: partial as any });
+      stream.push({ type: 'toolcall_end', contentIndex, toolCall, partial: partial as any });
+      contentIndex++;
+      toolCallIndex++;
+    }
+
+    function flushPending() {
+      if (pendingChars) {
+        emitTextDelta(pendingChars);
+        pendingChars = '';
+      }
+      if (tagMode === 'tool_call' && toolCallJsonBuffer) {
+        emitTextDelta(toolCallJsonBuffer);
+        toolCallJsonBuffer = '';
+      }
+      thinkBuffer = '';
+      tagMode = 'normal';
+    }
+
+    function processTextToken(token: string) {
+      const input = pendingChars + token;
+      pendingChars = '';
+
+      if (tagMode === 'think') {
+        thinkBuffer += input;
+        const endIdx = thinkBuffer.indexOf('</think>');
+        if (endIdx !== -1) {
+          tagMode = 'normal';
+          const after = thinkBuffer.slice(endIdx + 8);
+          thinkBuffer = '';
+          if (after) processTextToken(after);
+        }
+        return;
+      }
+
+      if (tagMode === 'tool_call') {
+        toolCallJsonBuffer += input;
+        const endIdx = toolCallJsonBuffer.indexOf('</tool_call>');
+        if (endIdx !== -1) {
+          const jsonStr = toolCallJsonBuffer.slice(0, endIdx);
+          tagMode = 'normal';
+          const after = toolCallJsonBuffer.slice(endIdx + 12);
+          toolCallJsonBuffer = '';
+          emitToolCallFromText(jsonStr.trim());
+          if (after) processTextToken(after);
+        }
+        return;
+      }
+
+      // Normal mode — strip orphaned </think> (thinking started in a prior chunk)
+      let text = input;
+      const orphanIdx = text.indexOf('</think>');
+      if (orphanIdx !== -1) {
+        const before = text.slice(0, orphanIdx);
+        const after = text.slice(orphanIdx + 8);
+        text = before + after;
+      }
+
+      // Check for <think> opening
+      const thinkIdx = text.indexOf('<think>');
+      if (thinkIdx !== -1) {
+        const before = text.slice(0, thinkIdx);
+        if (before) emitTextDelta(before);
+        tagMode = 'think';
+        thinkBuffer = '';
+        const after = text.slice(thinkIdx + 7);
+        if (after) processTextToken(after);
+        return;
+      }
+
+      // Check for <tool_call> opening
+      const toolIdx = text.indexOf('<tool_call>');
+      if (toolIdx !== -1) {
+        const before = text.slice(0, toolIdx);
+        if (before) emitTextDelta(before);
+        tagMode = 'tool_call';
+        toolCallJsonBuffer = '';
+        const after = text.slice(toolIdx + 11);
+        if (after) processTextToken(after);
+        return;
+      }
+
+      // Check for partial tag at end (< that could be start of a known tag)
+      const lastLt = text.lastIndexOf('<');
+      if (lastLt !== -1 && lastLt >= text.length - 12) {
+        const tail = text.slice(lastLt);
+        if ('<think>'.startsWith(tail) || '</think>'.startsWith(tail) ||
+            '<tool_call>'.startsWith(tail) || '</tool_call>'.startsWith(tail)) {
+          const safe = text.slice(0, lastLt);
+          if (safe) emitTextDelta(safe);
+          pendingChars = tail;
+          return;
+        }
+      }
+
+      if (text) emitTextDelta(text);
+    }
+
     // Build the partial AssistantMessage-like object for events
     const partialContent: unknown[] = [];
     const partial = {
@@ -222,16 +364,11 @@ function streamFromBackend(
           continue;
         }
 
-        // Handle text tokens
+        console.log('[StreamFn] SSE event:', JSON.stringify(event).slice(0, 120));
+
+        // Handle text tokens (with <think>/<tool_call> tag interception)
         if (event.token) {
-          if (accumulatedText === '') {
-            // First text — emit text_start
-            partialContent.push({ type: 'text', text: '' });
-            stream.push({ type: 'text_start', contentIndex, partial: partial as any });
-          }
-          accumulatedText += event.token;
-          (partialContent[contentIndex] as any).text = accumulatedText;
-          stream.push({ type: 'text_delta', contentIndex, delta: event.token, partial: partial as any });
+          processTextToken(event.token);
         }
 
         // Handle tool calls
@@ -267,6 +404,7 @@ function streamFromBackend(
 
         // Handle done
         if (event.done) {
+          flushPending();
           // Close text block if still open
           if (accumulatedText !== '') {
             stream.push({ type: 'text_end', contentIndex, content: accumulatedText, partial: partial as any });
@@ -294,6 +432,7 @@ function streamFromBackend(
 
     res.on('end', () => {
       // If stream ended without a done event, emit done
+      flushPending();
       if (accumulatedText !== '') {
         stream.push({ type: 'text_end', contentIndex, content: accumulatedText, partial: partial as any });
       }

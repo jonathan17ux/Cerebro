@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import type { Message } from '../../types/chat';
 import MarkdownContent from './MarkdownContent';
+import ThinkingIndicator from './ThinkingIndicator';
 import ToolCallCard from './ToolCallCard';
 
 interface ChatMessageProps {
@@ -35,6 +36,9 @@ export default function ChatMessage({ message }: ChatMessageProps) {
           ))}
         </div>
       )}
+
+      {/* Thinking indicator */}
+      {!isUser && message.isThinking && !hasContent && <ThinkingIndicator />}
 
       {/* Message content */}
       {(hasContent || isUser) && (
