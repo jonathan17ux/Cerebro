@@ -43,9 +43,9 @@
 | **5. Execution Engine** | |
 | Action interface (connectors, channels, transformers, model calls) | Done |
 | DAG executor with topological ordering and event streaming | Done |
-| Model-call and transformer action types | Not Started |
-| Event streaming system (main process → renderer) | Not Started |
-| Run Record persistence and state management | Not Started |
+| Model-call and transformer action types | Done |
+| Event streaming system (main process → renderer) | Done |
+| Run Record persistence and state management | Done |
 | **6. Routines** | |
 | Routine data model and schema | Not Started |
 | Routines screen (list, toggle, trigger summary, Run Now) | Not Started |

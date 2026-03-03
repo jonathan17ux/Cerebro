@@ -17,11 +17,22 @@ import { extractByPath } from '../utils';
 
 // ── Types ────────────────────────────────────────────────────────
 
+export interface StepPersistenceUpdate {
+  status: string;
+  output_json?: string;
+  summary?: string;
+  error?: string;
+  started_at?: string;
+  completed_at?: string;
+  duration_ms?: number;
+}
+
 export interface ExecutorContext {
   runId: string;
   backendPort: number;
   signal: AbortSignal;
   resolveModel: () => Promise<ResolvedModel | null>;
+  onStepUpdate?: (stepId: string, update: StepPersistenceUpdate) => void;
 }
 
 type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
@@ -194,8 +205,22 @@ export class DAGExecutor {
             reason: errorMsg,
             timestamp: new Date().toISOString(),
           });
+
+          // Persist step skip
+          this.ctx.onStepUpdate?.(step.id, {
+            status: 'skipped',
+            error: errorMsg,
+            completed_at: new Date().toISOString(),
+          });
           return;
         }
+
+        // Persist step failure
+        this.ctx.onStepUpdate?.(step.id, {
+          status: 'failed',
+          error: errorMsg,
+          completed_at: new Date().toISOString(),
+        });
 
         // 'fail' or 'retry' exhausted — throw to signal run abort
         throw err;
@@ -272,6 +297,16 @@ export class DAGExecutor {
       summary: output.summary,
       durationMs,
       timestamp: new Date().toISOString(),
+    });
+
+    // Persist step completion
+    this.ctx.onStepUpdate?.(step.id, {
+      status: 'completed',
+      output_json: JSON.stringify(output.data),
+      summary: output.summary,
+      started_at: new Date(startTime).toISOString(),
+      completed_at: new Date().toISOString(),
+      duration_ms: durationMs,
     });
   }
 

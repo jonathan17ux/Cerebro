@@ -22,8 +22,8 @@ export type ExecutionEvent =
 
   // ── Action detail (expert_step surfaces agent reasoning) ───────
   | { type: 'action_text_delta'; runId: string; stepId: string; delta: string }
-  | { type: 'action_tool_start'; runId: string; stepId: string; toolName: string; args: Record<string, unknown> }
-  | { type: 'action_tool_end'; runId: string; stepId: string; toolName: string; result: string; isError: boolean }
+  | { type: 'action_tool_start'; runId: string; stepId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }
+  | { type: 'action_tool_end'; runId: string; stepId: string; toolCallId: string; toolName: string; result: string; isError: boolean }
 
   // ── Approval gates (Phase 5 — defined here for type completeness)
   | { type: 'approval_requested'; runId: string; stepId: string; approvalId: string; summary: string; payload: unknown; timestamp: string }

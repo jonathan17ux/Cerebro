@@ -131,3 +131,54 @@ class AgentRun(Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class RunRecord(Base):
+    __tablename__ = "run_records"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid_hex)
+    routine_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    expert_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("experts.id", ondelete="SET NULL"), nullable=True)
+    conversation_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), index=True, default="created")  # created | running | completed | failed | cancelled
+    run_type: Mapped[str] = mapped_column(String(20), default="routine")
+    trigger: Mapped[str] = mapped_column(String(20), default="manual")
+    dag_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    total_steps: Mapped[int] = mapped_column(Integer, default=0)
+    completed_steps: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    failed_step_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class StepRecord(Base):
+    __tablename__ = "step_records"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid_hex)
+    run_id: Mapped[str] = mapped_column(String(32), ForeignKey("run_records.id", ondelete="CASCADE"), index=True)
+    step_id: Mapped[str] = mapped_column(String(32))
+    step_name: Mapped[str] = mapped_column(String(255))
+    action_type: Mapped[str] = mapped_column(String(50))
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    input_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    output_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    order_index: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ExecutionEventRecord(Base):
+    __tablename__ = "execution_events"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid_hex)
+    run_id: Mapped[str] = mapped_column(String(32), ForeignKey("run_records.id", ondelete="CASCADE"), index=True)
+    seq: Mapped[int] = mapped_column(Integer)
+    event_type: Mapped[str] = mapped_column(String(50), index=True)
+    step_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    payload_json: Mapped[str] = mapped_column(Text)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, index=True)
