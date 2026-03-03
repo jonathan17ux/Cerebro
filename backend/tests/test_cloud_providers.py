@@ -99,7 +99,7 @@ def test_chat_streams_events(client):
     fake_body = "\n".join(fake_sse_lines) + "\n"
 
     # We mock at the adapter level for a cleaner test
-    async def fake_openai_adapter(model, messages, temperature, max_tokens, top_p, api_key):
+    async def fake_openai_adapter(model, messages, temperature, max_tokens, top_p, api_key, tools=None):
         from local_models.schemas import ChatStreamEvent
         yield ChatStreamEvent(token="Hello")
         yield ChatStreamEvent(done=True, finish_reason="stop", usage={"total_tokens": 5})
@@ -129,7 +129,7 @@ def test_chat_adapter_error_yields_error_event(client):
     """If the adapter raises, the router should yield an error ChatStreamEvent."""
     _push_key(client, "anthropic", "sk-ant-test")
 
-    async def failing_adapter(model, messages, temperature, max_tokens, top_p, api_key):
+    async def failing_adapter(model, messages, temperature, max_tokens, top_p, api_key, tools=None):
         raise RuntimeError("connection reset")
         yield  # make it a generator  # noqa: E501
 

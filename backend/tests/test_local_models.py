@@ -61,14 +61,14 @@ class TestCatalog:
 
     def test_catalog_model_ids(self):
         ids = [m["id"] for m in CATALOG]
-        assert "gemma-3-4b" in ids
-        assert "gemma-3-12b" in ids
+        assert "qwen3-8b" in ids
+        assert "mistral-nemo-12b" in ids
         assert "qwen3.5-35b-a3b" in ids
 
     def test_catalog_tiers(self):
         tiers = {m["id"]: m["tier"] for m in CATALOG}
-        assert tiers["gemma-3-4b"] == "starter"
-        assert tiers["gemma-3-12b"] == "balanced"
+        assert tiers["qwen3-8b"] == "starter"
+        assert tiers["mistral-nemo-12b"] == "balanced"
         assert tiers["qwen3.5-35b-a3b"] == "power"
 
     def test_catalog_required_fields(self):
@@ -83,17 +83,17 @@ class TestCatalog:
                 assert field in entry, f"Missing {field} in {entry['id']}"
 
     def test_get_catalog_entry_found(self):
-        entry = get_catalog_entry("gemma-3-4b")
+        entry = get_catalog_entry("qwen3-8b")
         assert entry is not None
-        assert entry["name"] == "Gemma 3 4B"
+        assert entry["name"] == "Qwen 3 8B"
 
     def test_get_catalog_entry_not_found(self):
         assert get_catalog_entry("nonexistent") is None
 
     def test_get_catalog_merges_state(self, models_dir):
-        set_model_state(models_dir, "gemma-3-4b", status="downloaded", file_path="/tmp/model.gguf")
+        set_model_state(models_dir, "qwen3-8b", status="downloaded", file_path="/tmp/model.gguf")
         catalog = get_catalog(models_dir)
-        model = next(m for m in catalog if m.id == "gemma-3-4b")
+        model = next(m for m in catalog if m.id == "qwen3-8b")
         assert model.status == "downloaded"
         assert model.file_path == "/tmp/model.gguf"
 
@@ -165,12 +165,12 @@ class TestHardware:
         assert hw.available_ram_gb <= hw.total_ram_gb
 
     def test_recommend_starter(self):
-        hw = HardwareInfo(total_ram_gb=8, available_ram_gb=4)
-        assert recommend_model(hw) == "gemma-3-4b"
+        hw = HardwareInfo(total_ram_gb=12, available_ram_gb=6)
+        assert recommend_model(hw) == "qwen3-8b"
 
     def test_recommend_balanced(self):
         hw = HardwareInfo(total_ram_gb=16, available_ram_gb=8)
-        assert recommend_model(hw) == "gemma-3-12b"
+        assert recommend_model(hw) == "mistral-nemo-12b"
 
     def test_recommend_power(self):
         hw = HardwareInfo(total_ram_gb=32, available_ram_gb=16)
@@ -223,14 +223,14 @@ class TestDownloadEndpoint:
 
     def test_delete_model_not_downloaded(self, client_with_models):
         client, _ = client_with_models
-        res = client.delete("/models/gemma-3-4b")
+        res = client.delete("/models/qwen3-8b")
         assert res.status_code == 200
 
 
 class TestInferenceEndpoint:
     def test_load_not_downloaded(self, client_with_models):
         client, _ = client_with_models
-        res = client.post("/models/gemma-3-4b/load")
+        res = client.post("/models/qwen3-8b/load")
         assert res.status_code == 400
 
     def test_unload_no_model(self, client_with_models):
