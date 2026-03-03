@@ -9,12 +9,9 @@
 import type { RunScratchpad } from '../scratchpad';
 import type { ResolvedModel } from '../../agents/types';
 
-// ── Execution Events (minimal — Phase 2 defines the full union) ─
+// ── Execution Events (full union from Phase 2) ──────────────────
 
-export type ExecutionEvent = {
-  type: string;
-  [key: string]: unknown;
-};
+export type { ExecutionEvent } from '../events/types';
 
 // ── JSON Schema placeholder ─────────────────────────────────────
 

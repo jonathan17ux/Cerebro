@@ -1,3 +1,5 @@
+import type { ExecutionEvent } from '../engine/events/types';
+
 // --- IPC Channel Constants ---
 
 export const IPC_CHANNELS = {
@@ -24,6 +26,12 @@ export const IPC_CHANNELS = {
   AGENT_CANCEL: 'agent:cancel',
   AGENT_ACTIVE_RUNS: 'agent:active-runs',
   agentEvent: (runId: string) => `agent:event:${runId}`,
+
+  // Execution engine
+  ENGINE_RUN: 'engine:run',
+  ENGINE_CANCEL: 'engine:cancel',
+  ENGINE_ACTIVE_RUNS: 'engine:active-runs',
+  engineEvent: (runId: string) => `engine:event:${runId}`,
 } as const;
 
 // --- Backend Request/Response ---
@@ -137,6 +145,44 @@ export interface AgentAPI {
   onEvent(runId: string, callback: (event: RendererAgentEvent) => void): () => void;
 }
 
+// --- Execution Engine ---
+
+export interface EngineRunRequest {
+  dag: {
+    steps: Array<{
+      id: string;
+      name: string;
+      actionType: string;
+      params: Record<string, unknown>;
+      dependsOn: string[];
+      inputMappings: Array<{
+        sourceStepId: string;
+        sourceField: string;
+        targetField: string;
+      }>;
+      requiresApproval: boolean;
+      onError: 'fail' | 'skip' | 'retry';
+      maxRetries?: number;
+      timeoutMs?: number;
+    }>;
+  };
+  routineId?: string;
+  triggerSource?: string;
+}
+
+export interface EngineActiveRunInfo {
+  runId: string;
+  routineId?: string;
+  startedAt: number;
+}
+
+export interface EngineAPI {
+  run(request: EngineRunRequest): Promise<string>;
+  cancel(runId: string): Promise<boolean>;
+  activeRuns(): Promise<EngineActiveRunInfo[]>;
+  onEvent(runId: string, callback: (event: ExecutionEvent) => void): () => void;
+}
+
 // --- Preload API exposed on window.cerebro ---
 
 export interface CerebroAPI {
@@ -148,4 +194,5 @@ export interface CerebroAPI {
   credentials: CredentialAPI;
   models: ModelsAPI;
   agent: AgentAPI;
+  engine: EngineAPI;
 }

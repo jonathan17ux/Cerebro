@@ -42,7 +42,7 @@
 | Write test plan and automated test cases | Not Started |
 | **5. Execution Engine** | |
 | Action interface (connectors, channels, transformers, model calls) | Done |
-| DAG executor with topological ordering and event streaming | Not Started |
+| DAG executor with topological ordering and event streaming | Done |
 | Model-call and transformer action types | Not Started |
 | Event streaming system (main process → renderer) | Not Started |
 | Run Record persistence and state management | Not Started |

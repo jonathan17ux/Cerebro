@@ -1,0 +1,71 @@
+/**
+ * DAG type definitions for the execution engine.
+ *
+ * A DAG (Directed Acyclic Graph) defines a set of steps with dependencies.
+ * Steps run in topological order, with independent steps executing in parallel.
+ */
+
+// ── Step Definition ──────────────────────────────────────────────
+
+export interface StepDefinition {
+  /** Unique identifier for this step within the DAG. */
+  id: string;
+
+  /** Human-readable name displayed in the UI. */
+  name: string;
+
+  /** Which action type to execute (e.g. 'model_call', 'transformer', 'expert_step'). */
+  actionType: string;
+
+  /** Action-specific parameters. */
+  params: Record<string, unknown>;
+
+  /** IDs of steps that must complete before this one starts. */
+  dependsOn: string[];
+
+  /** Maps output fields from dependency steps into this step's wiredInputs. */
+  inputMappings: InputMapping[];
+
+  /** Whether this step requires human approval before execution (Phase 5). */
+  requiresApproval: boolean;
+
+  /** Error handling policy. */
+  onError: 'fail' | 'skip' | 'retry';
+
+  /** Max retry attempts when onError is 'retry'. Default: 1. */
+  maxRetries?: number;
+
+  /** Step timeout in milliseconds. Default: 300_000 (5 min). */
+  timeoutMs?: number;
+}
+
+// ── Input Mapping ────────────────────────────────────────────────
+
+export interface InputMapping {
+  /** ID of the step whose output to read from. */
+  sourceStepId: string;
+
+  /** Dot-path into the source step's output.data (e.g. "result" or "response"). */
+  sourceField: string;
+
+  /** Key in this step's wiredInputs where the value is placed. */
+  targetField: string;
+}
+
+// ── DAG Definition ───────────────────────────────────────────────
+
+export interface DAGDefinition {
+  steps: StepDefinition[];
+}
+
+// ── Engine Run Request ───────────────────────────────────────────
+
+export interface EngineRunRequest {
+  dag: DAGDefinition;
+
+  /** Optional reference to the routine definition. */
+  routineId?: string;
+
+  /** How this run was triggered: 'manual' | 'schedule' | 'chat'. */
+  triggerSource?: string;
+}

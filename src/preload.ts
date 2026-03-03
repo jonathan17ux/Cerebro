@@ -14,7 +14,10 @@ import type {
   AgentRunRequest,
   RendererAgentEvent,
   ActiveRunInfo,
+  EngineRunRequest,
+  EngineActiveRunInfo,
 } from './types/ipc';
+import type { ExecutionEvent } from './engine/events/types';
 
 const api: CerebroAPI = {
   invoke<T = unknown>(request: BackendRequest): Promise<BackendResponse<T>> {
@@ -86,6 +89,28 @@ const api: CerebroAPI = {
     onEvent(runId: string, callback: (event: RendererAgentEvent) => void): () => void {
       const channel = IPC_CHANNELS.agentEvent(runId);
       const listener = (_event: Electron.IpcRendererEvent, data: RendererAgentEvent) => {
+        callback(data);
+      };
+      ipcRenderer.on(channel, listener);
+      return () => {
+        ipcRenderer.removeListener(channel, listener);
+      };
+    },
+  },
+
+  engine: {
+    run(request: EngineRunRequest): Promise<string> {
+      return ipcRenderer.invoke(IPC_CHANNELS.ENGINE_RUN, request);
+    },
+    cancel(runId: string): Promise<boolean> {
+      return ipcRenderer.invoke(IPC_CHANNELS.ENGINE_CANCEL, runId);
+    },
+    activeRuns(): Promise<EngineActiveRunInfo[]> {
+      return ipcRenderer.invoke(IPC_CHANNELS.ENGINE_ACTIVE_RUNS);
+    },
+    onEvent(runId: string, callback: (event: ExecutionEvent) => void): () => void {
+      const channel = IPC_CHANNELS.engineEvent(runId);
+      const listener = (_event: Electron.IpcRendererEvent, data: ExecutionEvent) => {
         callback(data);
       };
       ipcRenderer.on(channel, listener);

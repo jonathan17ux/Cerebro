@@ -27,6 +27,8 @@ import {
 } from './credentials';
 import { AgentRuntime } from './agents';
 import type { AgentRunRequest } from './agents';
+import { ExecutionEngine } from './engine/engine';
+import type { EngineRunRequest } from './engine/dag/types';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -55,6 +57,9 @@ const activeStreams = new Map<string, http.ClientRequest>();
 
 // Agent runtime (initialized after backend is healthy)
 let agentRuntime: AgentRuntime | null = null;
+
+// Execution engine (initialized after backend is healthy)
+let executionEngine: ExecutionEngine | null = null;
 
 // --- Utility functions ---
 
@@ -184,6 +189,7 @@ async function startPythonBackend(): Promise<void> {
   await waitForHealthCheck(port);
   backendStatus = 'healthy';
   agentRuntime = new AgentRuntime(port);
+  executionEngine = new ExecutionEngine(port, agentRuntime);
   console.log(`[Cerebro] Python backend is ready on port ${port}`);
 }
 
@@ -510,6 +516,25 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.AGENT_ACTIVE_RUNS, async () => {
     if (!agentRuntime) return [];
     return agentRuntime.getActiveRuns();
+  });
+
+  // --- Execution Engine ---
+
+  ipcMain.handle(IPC_CHANNELS.ENGINE_RUN, async (event, request: EngineRunRequest) => {
+    if (!executionEngine) {
+      throw new Error('Execution engine not initialized');
+    }
+    return executionEngine.startRun(event.sender, request);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ENGINE_CANCEL, async (_event, runId: string) => {
+    if (!executionEngine) return false;
+    return executionEngine.cancelRun(runId);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.ENGINE_ACTIVE_RUNS, async () => {
+    if (!executionEngine) return [];
+    return executionEngine.getActiveRuns();
   });
 }
 
