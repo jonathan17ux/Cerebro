@@ -13,6 +13,8 @@ import type { SelectedModel, ProviderConnectionState } from '../types/providers'
 import { useProviders } from './ProviderContext';
 import { useModels } from './ModelContext';
 import { useMemory } from './MemoryContext';
+import { useRoutines } from './RoutineContext';
+import type { DAGDefinition } from '../engine/dag/types';
 import {
   generateId,
   titleFromContent,
@@ -100,6 +102,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const { selectedModel, connectionStatus } = useProviders();
   const { engineStatus } = useModels();
   const { getSystemPrompt, triggerExtraction } = useMemory();
+  const { registerRunCallback } = useRoutines();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationIdState] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -364,6 +367,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                   tc.completedAt = new Date();
                   updateMessage(convId!, assistantId, { toolCalls: [...toolCalls] });
                 }
+                // Detect run_routine tool result and attach engineRunId
+                if (event.toolName === 'run_routine' && !event.isError) {
+                  const marker = event.result.match(/\[ENGINE_RUN_ID:([^\]]+)\]/);
+                  if (marker) {
+                    updateMessage(convId!, assistantId, { engineRunId: marker[1] });
+                  }
+                }
                 break;
               }
 
@@ -459,6 +469,76 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     },
     [activeConversationId, activeExpertId, createConversation, addMessage, updateMessage],
   );
+
+  // ── Run routine in chat (triggered via UI "Run Now" button) ────
+  const runRoutineInChat = useCallback(
+    (info: { id: string; name: string; dagJson: string }) => {
+      // Create or reuse conversation
+      let convId = activeConversationId;
+      if (!convId) {
+        convId = createConversation(`Run routine: ${info.name}`);
+      }
+      setActiveScreen('chat');
+
+      // Add assistant message placeholder
+      const msgId = generateId();
+      const msg: Message = {
+        id: msgId,
+        conversationId: convId,
+        role: 'assistant',
+        content: `Running routine **${info.name}**...`,
+        createdAt: new Date(),
+      };
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === convId
+            ? { ...c, messages: [...c.messages, msg], updatedAt: new Date() }
+            : c,
+        ),
+      );
+
+      // Parse DAG and start engine run
+      let dag: DAGDefinition;
+      try {
+        dag = JSON.parse(info.dagJson);
+      } catch {
+        updateMessage(convId, msgId, { content: `Failed to parse DAG for routine **${info.name}**.` });
+        return;
+      }
+
+      window.cerebro.engine
+        .run({ dag, routineId: info.id, triggerSource: 'manual' })
+        .then((runId) => {
+          const content = `Running routine **${info.name}**...`;
+          updateMessage(convId!, msgId, { engineRunId: runId });
+          // Persist the run log message so it survives reload
+          apiCreateMessage(convId!, {
+            id: msgId,
+            role: 'assistant',
+            content,
+          }).catch(console.error);
+          // Bump backend metadata (fire-and-forget)
+          window.cerebro
+            .invoke({ method: 'POST', path: `/routines/${info.id}/run` })
+            .catch(console.error);
+        })
+        .catch((err) => {
+          const errorContent = `Failed to run routine **${info.name}**: ${err instanceof Error ? err.message : String(err)}`;
+          updateMessage(convId!, msgId, { content: errorContent });
+          apiCreateMessage(convId!, {
+            id: msgId,
+            role: 'assistant',
+            content: errorContent,
+          }).catch(console.error);
+        });
+    },
+    [activeConversationId, createConversation, updateMessage],
+  );
+
+  // Register with RoutineContext so "Run Now" buttons trigger chat flow
+  useEffect(() => {
+    registerRunCallback(runRoutineInChat);
+  }, [registerRunCallback, runRoutineInChat]);
 
   const activeConversation = conversations.find((c) => c.id === activeConversationId);
 

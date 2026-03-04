@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import type { WebContents } from 'electron';
 import type { Agent, AgentEvent } from '@mariozechner/pi-agent-core';
 import type { AgentRunRequest, ActiveRunInfo, RendererAgentEvent, ExpertModelConfig } from './types';
+import type { ExecutionEngine } from '../engine/engine';
 import { resolveModel } from './model-resolver';
 import { createToolsForExpert } from './tools';
 import { createExpertAgent } from './create-agent';
@@ -36,9 +37,14 @@ interface ExpertData {
 export class AgentRuntime {
   private activeRuns = new Map<string, ActiveRun>();
   private backendPort: number;
+  private executionEngine: ExecutionEngine | null = null;
 
   constructor(backendPort: number) {
     this.backendPort = backendPort;
+  }
+
+  setExecutionEngine(engine: ExecutionEngine): void {
+    this.executionEngine = engine;
   }
 
   async startRun(
@@ -101,6 +107,8 @@ export class AgentRuntime {
       scope: expertId ? 'expert' : 'personal',
       scopeId: expertId || null,
       backendPort: this.backendPort,
+      executionEngine: this.executionEngine ?? undefined,
+      webContents,
     };
     const toolAccess = expertData?.tool_access ? JSON.parse(expertData.tool_access) : null;
     const tools = createToolsForExpert(toolCtx, toolAccess);

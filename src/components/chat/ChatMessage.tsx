@@ -3,6 +3,7 @@ import type { Message } from '../../types/chat';
 import MarkdownContent from './MarkdownContent';
 import ThinkingIndicator from './ThinkingIndicator';
 import ToolCallCard from './ToolCallCard';
+import RunLogCard from './RunLogCard';
 
 interface ChatMessageProps {
   message: Message;
@@ -34,6 +35,13 @@ export default function ChatMessage({ message }: ChatMessageProps) {
           {message.toolCalls!.map((tc) => (
             <ToolCallCard key={tc.id} toolCall={tc} />
           ))}
+        </div>
+      )}
+
+      {/* Run log card */}
+      {!isUser && message.engineRunId && (
+        <div className="mb-2">
+          <RunLogCard engineRunId={message.engineRunId} />
         </div>
       )}
 

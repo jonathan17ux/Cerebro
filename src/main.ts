@@ -190,6 +190,7 @@ async function startPythonBackend(): Promise<void> {
   backendStatus = 'healthy';
   agentRuntime = new AgentRuntime(port);
   executionEngine = new ExecutionEngine(port, agentRuntime);
+  agentRuntime.setExecutionEngine(executionEngine);
   console.log(`[Cerebro] Python backend is ready on port ${port}`);
 }
 

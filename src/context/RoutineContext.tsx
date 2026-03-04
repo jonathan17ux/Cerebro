@@ -4,6 +4,7 @@ import {
   useState,
   useCallback,
   useMemo,
+  useRef,
   type ReactNode,
 } from 'react';
 import type { BackendResponse } from '../types/ipc';
@@ -11,6 +12,8 @@ import type { Routine, ApiRoutine, CreateRoutineInput } from '../types/routines'
 import { toRoutine, toApiBody } from '../types/routines';
 
 // ── Context ────────────────────────────────────────────────────
+
+export type RunRoutineCallback = (info: { id: string; name: string; dagJson: string }) => void;
 
 interface RoutineContextValue {
   routines: Routine[];
@@ -26,6 +29,7 @@ interface RoutineContextValue {
   deleteRoutine: (id: string) => Promise<void>;
   toggleEnabled: (routine: Routine) => Promise<void>;
   runRoutine: (id: string) => Promise<void>;
+  registerRunCallback: (cb: RunRoutineCallback) => void;
 }
 
 const RoutineContext = createContext<RoutineContextValue | null>(null);
@@ -35,6 +39,11 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
+  const runCallbackRef = useRef<RunRoutineCallback | null>(null);
+
+  const registerRunCallback = useCallback((cb: RunRoutineCallback) => {
+    runCallbackRef.current = cb;
+  }, []);
 
   const enabledCount = useMemo(
     () => routines.filter((r) => r.isEnabled).length,
@@ -129,19 +138,15 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
   );
 
   const runRoutine = useCallback(async (id: string) => {
-    try {
-      const res: BackendResponse<ApiRoutine> = await window.cerebro.invoke({
-        method: 'POST',
-        path: `/routines/${id}/run`,
-      });
-      if (res.ok) {
-        const updated = toRoutine(res.data);
-        setRoutines((prev) => prev.map((r) => (r.id === id ? updated : r)));
-      }
-    } catch (e) {
-      console.error('Failed to run routine:', e);
+    const routine = routines.find((r) => r.id === id);
+    if (!routine?.dagJson) return;
+
+    if (runCallbackRef.current) {
+      runCallbackRef.current({ id: routine.id, name: routine.name, dagJson: routine.dagJson });
+    } else {
+      console.warn('runRoutine called but no run callback registered (ChatProvider may not be mounted)');
     }
-  }, []);
+  }, [routines]);
 
   return (
     <RoutineContext.Provider
@@ -159,6 +164,7 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
         deleteRoutine,
         toggleEnabled,
         runRoutine,
+        registerRunCallback,
       }}
     >
       {children}

@@ -12,6 +12,7 @@ import {
 } from './memory-tools';
 import { createGetCurrentTime, createGetUserProfile } from './system-tools';
 import { createWebSearch } from './search-tools';
+import { createRunRoutine } from './routine-tools';
 
 /** All available tool factories, keyed by name. */
 const TOOL_FACTORIES: Record<string, (ctx: ToolContext) => AgentTool> = {
@@ -22,6 +23,7 @@ const TOOL_FACTORIES: Record<string, (ctx: ToolContext) => AgentTool> = {
   get_current_time: (_ctx) => createGetCurrentTime(),
   get_user_profile: createGetUserProfile,
   web_search: createWebSearch,
+  run_routine: createRunRoutine,
 };
 
 /** Default tool set that every expert gets. */
@@ -33,6 +35,7 @@ const DEFAULT_TOOLS = [
   'get_current_time',
   'get_user_profile',
   'web_search',
+  'run_routine',
 ];
 
 /**

@@ -36,6 +36,7 @@ export interface Message {
   isStreaming?: boolean;
   isThinking?: boolean;
   toolCalls?: ToolCall[];
+  engineRunId?: string;
 }
 
 export interface Conversation {

@@ -20,12 +20,17 @@ export interface ExpertModelConfig {
 
 // ── Tool context ────────────────────────────────────────────────
 
+import type { ExecutionEngine } from '../engine/engine';
+import type { WebContents } from 'electron';
+
 export interface ToolContext {
   expertId: string | null;
   conversationId: string;
   scope: string;
   scopeId: string | null;
   backendPort: number;
+  executionEngine?: ExecutionEngine;
+  webContents?: WebContents;
 }
 
 // ── Agent run request (from renderer) ───────────────────────────

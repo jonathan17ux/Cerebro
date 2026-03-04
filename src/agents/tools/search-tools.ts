@@ -2,53 +2,10 @@
  * Web search tools for the agent system.
  */
 
-import http from 'node:http';
 import { Type } from '@sinclair/typebox';
-import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import type { AgentTool } from '@mariozechner/pi-agent-core';
 import type { ToolContext } from '../types';
-
-function backendRequest<T>(port: number, method: string, path: string, body?: unknown): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const bodyStr = body ? JSON.stringify(body) : undefined;
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (bodyStr) headers['Content-Length'] = Buffer.byteLength(bodyStr).toString();
-
-    const req = http.request(
-      {
-        hostname: '127.0.0.1',
-        port,
-        path,
-        method,
-        headers,
-        timeout: 30_000,
-      },
-      (res) => {
-        let data = '';
-        res.on('data', (chunk: Buffer) => {
-          data += chunk.toString();
-        });
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(data) as T);
-          } catch {
-            resolve(data as T);
-          }
-        });
-      },
-    );
-    req.on('error', reject);
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Request timed out'));
-    });
-    if (bodyStr) req.write(bodyStr);
-    req.end();
-  });
-}
-
-function textResult(text: string): AgentToolResult<void> {
-  return { content: [{ type: 'text', text }], details: undefined as any };
-}
+import { backendRequest, textResult } from './tool-utils';
 
 interface SearchResultItem {
   title: string;
