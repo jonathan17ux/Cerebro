@@ -4,6 +4,7 @@ import MarkdownContent from './MarkdownContent';
 import ThinkingIndicator from './ThinkingIndicator';
 import ToolCallCard from './ToolCallCard';
 import RunLogCard from './RunLogCard';
+import RoutineProposalCard from './RoutineProposalCard';
 
 interface ChatMessageProps {
   message: Message;
@@ -42,6 +43,17 @@ export default function ChatMessage({ message }: ChatMessageProps) {
       {!isUser && message.engineRunId && (
         <div className="mb-2">
           <RunLogCard engineRunId={message.engineRunId} />
+        </div>
+      )}
+
+      {/* Routine proposal card */}
+      {!isUser && message.routineProposal && (
+        <div className="mb-2">
+          <RoutineProposalCard
+            proposal={message.routineProposal}
+            messageId={message.id}
+            conversationId={message.conversationId}
+          />
         </div>
       )}
 

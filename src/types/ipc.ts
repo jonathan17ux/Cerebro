@@ -116,10 +116,22 @@ export interface ModelsAPI {
 
 // --- Agent System ---
 
+export interface ProposalSnapshot {
+  name: string;
+  status: 'proposed' | 'previewing' | 'saved' | 'dismissed';
+}
+
+export interface MessageSnapshot {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface AgentRunRequest {
   conversationId: string;
   content: string;
   expertId?: string | null;
+  recentMessages?: MessageSnapshot[];
+  routineProposals?: ProposalSnapshot[];
 }
 
 export type RendererAgentEvent =

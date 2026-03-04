@@ -1,6 +1,6 @@
 /**
- * Routine execution tool for the agent system.
- * Lets the LLM trigger routine execution from chat.
+ * Routine tools for the agent system.
+ * Lets the LLM trigger routine execution and propose new routines from chat.
  */
 
 import { Type } from '@sinclair/typebox';
@@ -89,6 +89,110 @@ export function createRunRoutine(ctx: ToolContext): AgentTool {
           `Failed to start routine "${match.name}": ${err instanceof Error ? err.message : String(err)}`,
         );
       }
+    },
+  };
+}
+
+/**
+ * Fuzzy name similarity check — returns true if names are close enough
+ * to be considered duplicates. Uses token-based Jaccard overlap to avoid
+ * false positives with short names (e.g. "AI" matching "AI Email Draft").
+ */
+function isSimilarName(a: string, b: string): boolean {
+  const tokenize = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(Boolean);
+  const ta = tokenize(a);
+  const tb = tokenize(b);
+  if (ta.length === 0 || tb.length === 0) return false;
+
+  // Exact match after normalization
+  if (ta.join(' ') === tb.join(' ')) return true;
+
+  // Jaccard similarity — require >60% token overlap
+  const setA = new Set(ta);
+  const setB = new Set(tb);
+  let intersection = 0;
+  for (const t of setA) {
+    if (setB.has(t)) intersection++;
+  }
+  const union = new Set([...ta, ...tb]).size;
+  return intersection / union > 0.6;
+}
+
+export function createProposeRoutine(ctx: ToolContext): AgentTool {
+  return {
+    name: 'propose_routine',
+    description:
+      'Propose saving a repeatable task as a routine. Use this when the user describes a workflow they want to automate or repeat regularly. The proposal will be shown inline for the user to preview, save, or dismiss. Each step should be a single, concrete action — not too granular (avoid "open browser") and not too vague (avoid "handle everything"). Aim for 3-7 steps.',
+    label: 'Propose Routine',
+    parameters: Type.Object({
+      name: Type.String({
+        description: 'Short, descriptive name for the routine (e.g. "Morning Standup Prep")',
+      }),
+      description: Type.Optional(
+        Type.String({
+          description: 'Brief description of what this routine does and why (1-2 sentences)',
+        }),
+      ),
+      steps: Type.Array(Type.String(), {
+        description: 'Ordered list of plain-english steps the routine should perform',
+        minItems: 1,
+      }),
+      trigger_type: Type.Optional(
+        Type.Union([Type.Literal('manual'), Type.Literal('cron'), Type.Literal('webhook')], {
+          description: 'How the routine should be triggered. Default: manual',
+        }),
+      ),
+      cron_expression: Type.Optional(
+        Type.String({
+          description: 'Cron expression if trigger_type is "cron" (e.g. "0 9 * * 1-5" for weekdays at 9am). Format: minute hour day-of-month month day-of-week (5 fields, no seconds)',
+        }),
+      ),
+      default_runner_id: Type.Optional(
+        Type.String({ description: 'Expert/runner ID to execute steps, if applicable' }),
+      ),
+      required_connections: Type.Optional(
+        Type.Array(Type.String(), {
+          description: 'External services this routine needs (e.g. ["web_search", "gmail"])',
+        }),
+      ),
+      approval_gates: Type.Optional(
+        Type.Array(Type.String(), {
+          description: 'Steps that require user approval before executing (exact step text from the steps array)',
+        }),
+      ),
+    }),
+    execute: async (_toolCallId, params) => {
+      // Check for duplicate routines before proposing
+      try {
+        const res = await backendRequest<{ routines: RoutineRecord[] }>(
+          ctx.backendPort,
+          'GET',
+          '/routines?limit=200',
+        );
+        const duplicate = res.routines.find((r) => isSimilarName(r.name, params.name));
+        if (duplicate) {
+          return textResult(
+            `A similar routine already exists: "${duplicate.name}" (ID: ${duplicate.id}). ` +
+            `Suggest running it with \`run_routine\` or ask the user if they want to edit the existing one instead of creating a duplicate.`,
+          );
+        }
+      } catch {
+        // Non-critical — proceed with proposal if backend is unreachable
+      }
+
+      const proposal = {
+        type: 'routine_proposal',
+        name: params.name,
+        description: params.description ?? '',
+        steps: params.steps,
+        triggerType: params.trigger_type ?? 'manual',
+        cronExpression: params.cron_expression,
+        defaultRunnerId: params.default_runner_id,
+        requiredConnections: params.required_connections ?? [],
+        approvalGates: params.approval_gates ?? [],
+      };
+      return textResult(JSON.stringify(proposal));
     },
   };
 }

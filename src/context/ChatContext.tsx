@@ -42,7 +42,7 @@ interface ChatState {
 interface ChatActions {
   createConversation: (firstMessage?: string) => string;
   setActiveConversation: (id: string | null) => void;
-  addMessage: (conversationId: string, role: Message['role'], content: string) => void;
+  addMessage: (conversationId: string, role: Message['role'], content: string) => string;
   updateMessage: (conversationId: string, messageId: string, partial: Partial<Message>) => void;
   deleteConversation: (id: string) => void;
   setActiveScreen: (screen: Screen) => void;
@@ -317,10 +317,33 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       // Route through agent system
       const runAgent = async () => {
         try {
+          // Collect conversation context so the LLM has multi-turn awareness.
+          const conv = conversationsRef.current.find((c) => c.id === convId);
+          const allMessages = conv?.messages ?? [];
+
+          // Recent messages — gives the LLM conversational continuity across turns.
+          // Note: React batches state updates, so conversationsRef still has the
+          // pre-addMessage state here. No need to exclude the just-added message.
+          const MAX_RECENT = 10;
+          const recentMessages = allMessages
+            .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content && !m.isThinking)
+            .slice(-MAX_RECENT)
+            .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+
+          // Routine proposal snapshots — so the LLM knows what it proposed and what happened.
+          const routineProposals = allMessages
+            .filter((m) => m.routineProposal)
+            .map((m) => ({
+              name: m.routineProposal!.name,
+              status: m.routineProposal!.status,
+            }));
+
           const runId = await window.cerebro.agent.run({
             conversationId: convId!,
             content,
             expertId,
+            recentMessages: recentMessages.length > 0 ? recentMessages : undefined,
+            routineProposals: routineProposals.length > 0 ? routineProposals : undefined,
           });
 
           // Keep isThinking true and message.isThinking true until first content arrives
@@ -373,6 +396,27 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                   if (marker) {
                     updateMessage(convId!, assistantId, { engineRunId: marker[1] });
                   }
+                }
+                // Detect propose_routine tool result and attach proposal to message
+                if (event.toolName === 'propose_routine' && !event.isError) {
+                  try {
+                    const parsed = JSON.parse(event.result);
+                    if (parsed.type === 'routine_proposal') {
+                      updateMessage(convId!, assistantId, {
+                        routineProposal: {
+                          name: parsed.name,
+                          description: parsed.description ?? '',
+                          steps: parsed.steps,
+                          triggerType: parsed.triggerType,
+                          cronExpression: parsed.cronExpression,
+                          defaultRunnerId: parsed.defaultRunnerId,
+                          requiredConnections: parsed.requiredConnections ?? [],
+                          approvalGates: parsed.approvalGates ?? [],
+                          status: 'proposed',
+                        },
+                      });
+                    }
+                  } catch { /* not valid JSON, treat as normal result */ }
                 }
                 break;
               }

@@ -35,10 +35,27 @@ export interface ToolContext {
 
 // ── Agent run request (from renderer) ───────────────────────────
 
+/** Summary of a routine proposal from a previous turn. */
+export interface ProposalSnapshot {
+  name: string;
+  status: 'proposed' | 'previewing' | 'saved' | 'dismissed';
+}
+
+/** Lightweight message summary for conversation context. */
+export interface MessageSnapshot {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface AgentRunRequest {
   conversationId: string;
   content: string;
   expertId?: string | null;
+  /** Recent messages from this conversation so the LLM has multi-turn context. */
+  recentMessages?: MessageSnapshot[];
+  /** Routine proposals from earlier messages in this conversation, so the LLM
+   *  can avoid re-proposing dismissed routines or know which were saved. */
+  routineProposals?: ProposalSnapshot[];
 }
 
 // ── Events sent to renderer ─────────────────────────────────────

@@ -1,3 +1,5 @@
+import type { TriggerType } from './routines';
+
 export type Role = 'user' | 'assistant' | 'system';
 
 export type Screen =
@@ -23,6 +25,19 @@ export interface ToolCall {
   completedAt?: Date;
 }
 
+export interface RoutineProposal {
+  name: string;
+  description: string;
+  steps: string[];
+  triggerType: TriggerType;
+  cronExpression?: string;
+  defaultRunnerId?: string;
+  requiredConnections: string[];
+  approvalGates: string[];
+  status: 'proposed' | 'previewing' | 'saved' | 'dismissed';
+  savedRoutineId?: string;
+}
+
 export interface Message {
   id: string;
   conversationId: string;
@@ -37,6 +52,7 @@ export interface Message {
   isThinking?: boolean;
   toolCalls?: ToolCall[];
   engineRunId?: string;
+  routineProposal?: RoutineProposal;
 }
 
 export interface Conversation {

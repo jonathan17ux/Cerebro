@@ -100,6 +100,33 @@ export class AgentRuntime {
       // Memory is non-critical
     }
 
+    // Inject recent conversation history so the LLM has multi-turn context.
+    // Truncate individual messages to avoid blowing the token budget.
+    if (request.recentMessages && request.recentMessages.length > 0) {
+      const MAX_MSG_CHARS = 500;
+      const transcript = request.recentMessages
+        .map((m) => {
+          const tag = m.role === 'user' ? 'user' : 'assistant';
+          const text = m.content.length > MAX_MSG_CHARS
+            ? m.content.slice(0, MAX_MSG_CHARS) + '...(truncated)'
+            : m.content;
+          return `<${tag}>${text}</${tag}>`;
+        })
+        .join('\n');
+      systemPrompt += `\n\n## Recent Conversation History\nThe following is the recent conversation with the user. Use this context to understand follow-ups, avoid repeating yourself, and maintain conversational continuity.\n\n${transcript}`;
+    }
+
+    // Inject routine proposal context so the LLM knows what it already proposed.
+    // Cap at 20 to avoid system prompt bloat in long conversations.
+    if (request.routineProposals && request.routineProposals.length > 0) {
+      const proposals = request.routineProposals.slice(-20);
+      const lines = proposals.map(
+        (p) => `- "${p.name}" → ${p.status}`,
+      );
+      systemPrompt += `\n\n## Prior Routine Proposals (this conversation)\n${lines.join('\n')}\n` +
+        `If a proposal was dismissed, do NOT re-propose it. If saved, the user already has it.`;
+    }
+
     // Build tools
     const toolCtx = {
       expertId: expertId || null,
