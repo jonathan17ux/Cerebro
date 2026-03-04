@@ -49,7 +49,7 @@
 | **6. Routines** | |
 | Routine data model and schema | Done |
 | Routines screen (list, toggle, trigger summary, Run Now) | Done |
-| Run Now with live inline logs in Chat | Not Started |
+| Run Now with live inline logs in Chat | Done |
 | Routine Proposal Cards in Chat (propose → preview → save) | Not Started |
 | Cerebro routine proposal logic (detect repeatable intent) | Not Started |
 | Preview execution with streaming logs | Not Started |
