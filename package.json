@@ -34,6 +34,7 @@
     "@electron-forge/plugin-fuses": "^7.11.1",
     "@electron-forge/plugin-vite": "^7.11.1",
     "@electron/fuses": "^1.8.0",
+    "@types/d3-selection": "^3.0.11",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/expr-eval": "^1.0.2",
     "@types/mustache": "^4.2.6",
@@ -53,10 +54,12 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^2.0.4",
     "@mariozechner/pi-agent-core": "^0.55.3",
     "@sinclair/typebox": "^0.34.48",
     "@tailwindcss/postcss": "^4.2.1",
     "@tailwindcss/typography": "^0.5.19",
+    "@xyflow/react": "^12.10.1",
     "clsx": "^2.1.1",
     "electron-squirrel-startup": "^1.0.1",
     "expr-eval": "^2.0.2",

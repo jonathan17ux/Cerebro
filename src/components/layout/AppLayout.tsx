@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import ChatView from '../chat/ChatView';
 import WelcomeView from '../chat/WelcomeView';
 import ExpertsScreen from '../screens/ExpertsScreen';
+import RoutinesScreen from '../screens/RoutinesScreen';
 import IntegrationsScreen from '../screens/IntegrationsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
@@ -36,6 +37,9 @@ export default function AppLayout() {
     }
     if (activeScreen === 'experts') {
       return <ExpertsScreen />;
+    }
+    if (activeScreen === 'routines') {
+      return <RoutinesScreen />;
     }
     if (activeScreen === 'integrations') {
       return <IntegrationsScreen />;

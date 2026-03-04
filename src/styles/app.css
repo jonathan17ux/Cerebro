@@ -261,3 +261,68 @@ body {
 .animate-slide-in-right {
   animation: slideInRight 0.25s ease-out;
 }
+
+/* ── React Flow Dark Theme ────────────────────────────────────── */
+
+.react-flow {
+  --xy-background-color: var(--color-bg-base);
+  --xy-node-border-radius: 8px;
+  --xy-node-background-color: var(--color-bg-surface);
+  --xy-node-border: 1px solid var(--color-border-subtle);
+  --xy-node-color: var(--color-text-primary);
+  --xy-edge-stroke: var(--color-border-default);
+  --xy-edge-stroke-width: 1.5;
+  --xy-edge-stroke-selected: var(--color-accent);
+  --xy-handle-background-color: var(--color-accent);
+  --xy-handle-border-color: var(--color-bg-surface);
+  --xy-minimap-background-color: var(--color-bg-surface);
+  --xy-minimap-mask-background-color: rgba(9, 9, 11, 0.7);
+  --xy-minimap-node-background-color: var(--color-bg-elevated);
+  --xy-minimap-node-stroke-color: var(--color-border-default);
+  --xy-controls-button-background-color: var(--color-bg-surface);
+  --xy-controls-button-border-color: var(--color-border-subtle);
+  --xy-controls-button-color: var(--color-text-secondary);
+  --xy-controls-button-background-color-hover: var(--color-bg-hover);
+  --xy-attribution-background-color: transparent;
+}
+
+.react-flow__background {
+  background-color: var(--color-bg-base);
+}
+
+.react-flow__background pattern circle {
+  fill: var(--color-border-subtle);
+}
+
+.react-flow__minimap {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.react-flow__selection {
+  background: rgba(6, 182, 212, 0.08);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.react-flow__handle {
+  width: 8px;
+  height: 8px;
+}
+
+.react-flow__handle-connecting {
+  background: var(--color-accent);
+  box-shadow: 0 0 6px rgba(6, 182, 212, 0.5);
+}
+
+.react-flow__edge-path {
+  stroke: var(--color-border-default);
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--color-accent);
+}
+
+.react-flow__attribution {
+  display: none;
+}
