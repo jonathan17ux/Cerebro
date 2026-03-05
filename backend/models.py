@@ -134,7 +134,8 @@ class AgentRun(Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid_hex)
     expert_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("experts.id", ondelete="SET NULL"), nullable=True)
-    conversation_id: Mapped[str | None] = mapped_column(String(32), ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True)
+    conversation_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    parent_run_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(20), default="running")  # running | completed | cancelled | error
     turns: Mapped[int] = mapped_column(Integer, default=0)
     total_tokens: Mapped[int] = mapped_column(Integer, default=0)

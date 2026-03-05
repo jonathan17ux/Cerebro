@@ -94,6 +94,15 @@ def test_base_prompt_contains_routing(client):
     assert "web_search" in prompt
 
 
+def test_base_prompt_contains_current_date(client):
+    """Base prompt includes current date/time section."""
+    r = client.post("/memory/context", json={})
+    prompt = r.json()["system_prompt"]
+    assert "## Current Date & Time" in prompt
+    # Should contain a weekday name and UTC
+    assert "UTC" in prompt
+
+
 # ── Expert catalog tests ─────────────────────────────────────────
 
 
@@ -111,7 +120,7 @@ def test_empty_expert_catalog(client):
 def test_expert_catalog_shows_only_enabled(client):
     """Expert catalog shows only enabled experts."""
     db = _db(client)
-    _create_expert(db, name="Enabled Expert", is_enabled=True)
+    enabled = _create_expert(db, name="Enabled Expert", is_enabled=True)
     _create_expert(db, name="Disabled Expert", is_enabled=False)
 
     r = client.post("/memory/context", json={
@@ -119,6 +128,7 @@ def test_expert_catalog_shows_only_enabled(client):
     })
     prompt = r.json()["system_prompt"]
     assert "Enabled Expert" in prompt
+    assert f"[ID: {enabled.id}]" in prompt
     assert "Disabled Expert" not in prompt
 
 
@@ -162,6 +172,20 @@ def test_expert_catalog_ordered_by_last_active(client):
     assert prompt.index("New Expert") < prompt.index("Old Expert")
     # "Null Expert" should appear last (nullslast)
     assert prompt.index("Old Expert") < prompt.index("Null Expert")
+
+
+def test_expert_catalog_includes_expert_ids(client):
+    """Expert catalog includes [ID: xxx] for each expert."""
+    db = _db(client)
+    e1 = _create_expert(db, name="Coach", domain="fitness", description="Helps with workouts")
+    e2 = _create_expert(db, name="Writer", domain="writing", description="Drafts content")
+
+    r = client.post("/memory/context", json={
+        "include_expert_catalog": True,
+    })
+    prompt = r.json()["system_prompt"]
+    assert f"**Coach** [ID: {e1.id}]" in prompt
+    assert f"**Writer** [ID: {e2.id}]" in prompt
 
 
 def test_expert_catalog_not_injected_when_flag_false(client):
@@ -277,9 +301,10 @@ def test_full_prompt_section_ordering(client):
     })
     prompt = r.json()["system_prompt"]
 
-    # Verify ordering: Identity -> Expert Catalog -> Routine Catalog ->
+    # Verify ordering: Identity -> Date -> Expert Catalog -> Routine Catalog ->
     # Expert Guidance -> Routine Guidance -> Profile -> Style
     identity_pos = prompt.index("## Identity & Role")
+    date_pos = prompt.index("## Current Date & Time")
     expert_cat_pos = prompt.index("## Available Experts")
     routine_cat_pos = prompt.index("## Available Routines")
     expert_guide_pos = prompt.index("## Expert Proposals")
@@ -287,7 +312,8 @@ def test_full_prompt_section_ordering(client):
     profile_pos = prompt.index("## About the User")
     style_pos = prompt.index("## Communication Style")
 
-    assert identity_pos < expert_cat_pos
+    assert identity_pos < date_pos
+    assert date_pos < expert_cat_pos
     assert expert_cat_pos < routine_cat_pos
     assert routine_cat_pos < expert_guide_pos
     assert expert_guide_pos < routine_guide_pos
@@ -323,7 +349,7 @@ def test_team_expert_shows_member_count(client):
         {"expert_id": _hex_id(), "role": "writer", "order": 1},
         {"expert_id": _hex_id(), "role": "editor", "order": 2},
     ]
-    _create_expert(
+    team = _create_expert(
         db,
         name="Content Team",
         description="A team for content creation",
@@ -335,7 +361,7 @@ def test_team_expert_shows_member_count(client):
         "include_expert_catalog": True,
     })
     prompt = r.json()["system_prompt"]
-    assert "Content Team" in prompt
+    assert f"**Content Team** [ID: {team.id}]" in prompt
     assert "(type: team, 3 members)" in prompt
 
 

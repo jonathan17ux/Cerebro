@@ -313,7 +313,7 @@ def _build_expert_catalog(db: Session) -> str:
                 detail = " (type: team)"
         elif e.domain:
             detail = f" (domain: {e.domain})"
-        lines.append(f"- **{e.name}**{detail}: {e.description}")
+        lines.append(f"- **{e.name}** [ID: {e.id}]{detail}: {e.description}")
 
     total_enabled = (
         db.query(Expert).filter(Expert.is_enabled.is_(True)).count()
@@ -388,6 +388,12 @@ async def assemble_system_prompt(
             sections.append(BASE_SYSTEM_PROMPT)
     else:
         sections.append(BASE_SYSTEM_PROMPT)
+
+    # 1b. Current date/time — always included so the LLM can ground relative time references
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    sections.append(f"## Current Date & Time\n{now.strftime('%A, %B %d, %Y at %I:%M %p UTC')}")
 
     # 2. Expert catalog (dynamic, only for Cerebro scope)
     if include_expert_catalog and scope != "expert":

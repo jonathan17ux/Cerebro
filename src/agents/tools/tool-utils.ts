@@ -53,3 +53,29 @@ export function backendRequest<T>(port: number, method: string, path: string, bo
 export function textResult(text: string): AgentToolResult<void> {
   return { content: [{ type: 'text', text }], details: undefined as any };
 }
+
+/**
+ * Fuzzy name similarity check — returns true if names are close enough
+ * to be considered duplicates. Uses token-based Jaccard overlap to avoid
+ * false positives with short names (e.g. "AI" matching "AI Email Draft").
+ */
+export function isSimilarName(a: string, b: string): boolean {
+  const tokenize = (s: string) =>
+    s.toLowerCase().replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(Boolean);
+  const ta = tokenize(a);
+  const tb = tokenize(b);
+  if (ta.length === 0 || tb.length === 0) return false;
+
+  // Exact match after normalization
+  if (ta.join(' ') === tb.join(' ')) return true;
+
+  // Jaccard similarity — require >60% token overlap
+  const setA = new Set(ta);
+  const setB = new Set(tb);
+  let intersection = 0;
+  for (const t of setA) {
+    if (setB.has(t)) intersection++;
+  }
+  const union = new Set([...ta, ...tb]).size;
+  return intersection / union > 0.6;
+}

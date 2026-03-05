@@ -11,6 +11,7 @@ class AgentRunCreate(BaseModel):
     id: str
     expert_id: str | None = None
     conversation_id: str | None = None
+    parent_run_id: str | None = None
     status: str = "running"
 
 
@@ -27,6 +28,7 @@ class AgentRunResponse(BaseModel):
     id: str
     expert_id: str | None
     conversation_id: str | None
+    parent_run_id: str | None = None
     status: str
     turns: int
     total_tokens: int

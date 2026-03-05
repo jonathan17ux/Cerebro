@@ -27,6 +27,7 @@ def _run_to_response(run: AgentRun) -> AgentRunResponse:
         id=run.id,
         expert_id=run.expert_id,
         conversation_id=run.conversation_id,
+        parent_run_id=run.parent_run_id,
         status=run.status,
         turns=run.turns,
         total_tokens=run.total_tokens,
@@ -43,6 +44,7 @@ def create_agent_run(body: AgentRunCreate, db=Depends(get_db)):
         id=body.id or _uuid_hex(),
         expert_id=body.expert_id,
         conversation_id=body.conversation_id,
+        parent_run_id=body.parent_run_id,
         status=body.status,
     )
     db.add(run)

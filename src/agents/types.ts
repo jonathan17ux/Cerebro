@@ -18,6 +18,15 @@ export interface ExpertModelConfig {
   display_name: string;
 }
 
+// ── Sub-agent result ────────────────────────────────────────────
+
+export interface SubAgentResult {
+  runId: string;
+  status: 'completed' | 'error';
+  messageContent: string;
+  error?: string;
+}
+
 // ── Tool context ────────────────────────────────────────────────
 
 import type { ExecutionEngine } from '../engine/engine';
@@ -31,6 +40,13 @@ export interface ToolContext {
   backendPort: number;
   executionEngine?: ExecutionEngine;
   webContents?: WebContents;
+  /** AgentRuntime reference for delegation (inline type to avoid circular import). */
+  agentRuntime?: {
+    startRun(webContents: WebContents, request: AgentRunRequest): Promise<string>;
+    waitForCompletion(runId: string, timeoutMs?: number): Promise<SubAgentResult>;
+  };
+  /** The parent run ID when this tool is executing inside a delegated run. */
+  parentRunId?: string;
 }
 
 // ── Agent run request (from renderer) ───────────────────────────
@@ -57,6 +73,8 @@ export interface AgentRunRequest {
   conversationId: string;
   content: string;
   expertId?: string | null;
+  /** Parent run ID when this is a delegated sub-run. */
+  parentRunId?: string;
   /** Recent messages from this conversation so the LLM has multi-turn context. */
   recentMessages?: MessageSnapshot[];
   /** Routine proposals from earlier messages in this conversation, so the LLM
@@ -75,6 +93,8 @@ export type RendererAgentEvent =
   | { type: 'text_delta'; delta: string }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_end'; toolCallId: string; toolName: string; result: string; isError: boolean }
+  | { type: 'delegation_start'; parentRunId: string; childRunId: string; expertId: string; expertName: string }
+  | { type: 'delegation_end'; parentRunId: string; childRunId: string; status: string }
   | { type: 'done'; runId: string; messageContent: string }
   | { type: 'error'; runId: string; error: string };
 

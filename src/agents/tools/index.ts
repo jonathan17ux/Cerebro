@@ -13,6 +13,7 @@ import {
 import { createGetCurrentTime, createGetUserProfile } from './system-tools';
 import { createWebSearch } from './search-tools';
 import { createRunRoutine, createProposeRoutine } from './routine-tools';
+import { createDelegateToExpert, createListExperts } from './delegation-tools';
 
 /** All available tool factories, keyed by name. */
 const TOOL_FACTORIES: Record<string, (ctx: ToolContext) => AgentTool> = {
@@ -25,6 +26,8 @@ const TOOL_FACTORIES: Record<string, (ctx: ToolContext) => AgentTool> = {
   web_search: createWebSearch,
   run_routine: createRunRoutine,
   propose_routine: createProposeRoutine,
+  delegate_to_expert: createDelegateToExpert,
+  list_experts: createListExperts,
 };
 
 /** Default tool set that every expert gets. */
@@ -40,18 +43,37 @@ const DEFAULT_TOOLS = [
   'propose_routine',
 ];
 
+/** Tools only available to Cerebro (personal scope), not individual experts. */
+const CEREBRO_TOOLS = [
+  'delegate_to_expert',
+  'list_experts',
+  'propose_routine',
+  'run_routine',
+];
+
 /**
  * Build the tools array for a given expert.
  * If `toolAccess` is provided, only include those tools.
- * Otherwise include the default set.
+ * Otherwise include the default set, plus Cerebro-only tools for personal scope.
  */
 export function createToolsForExpert(
   ctx: ToolContext,
   toolAccess?: string[] | null,
 ): AgentTool[] {
-  const toolNames = toolAccess && toolAccess.length > 0 ? toolAccess : DEFAULT_TOOLS;
-  const tools: AgentTool[] = [];
+  let toolNames: string[];
 
+  if (toolAccess && toolAccess.length > 0) {
+    // Explicit tool access list — use as-is
+    toolNames = toolAccess;
+  } else if (ctx.scope === 'personal') {
+    // Cerebro (personal scope) gets default + Cerebro-only tools
+    toolNames = [...DEFAULT_TOOLS, ...CEREBRO_TOOLS.filter((t) => !DEFAULT_TOOLS.includes(t))];
+  } else {
+    // Individual experts get the default set (no delegation/routing tools)
+    toolNames = DEFAULT_TOOLS.filter((t) => !CEREBRO_TOOLS.includes(t));
+  }
+
+  const tools: AgentTool[] = [];
   for (const name of toolNames) {
     const factory = TOOL_FACTORIES[name];
     if (factory) {

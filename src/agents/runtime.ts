@@ -6,7 +6,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import type { WebContents } from 'electron';
 import type { Agent, AgentEvent } from '@mariozechner/pi-agent-core';
-import type { AgentRunRequest, ActiveRunInfo, RendererAgentEvent, ExpertModelConfig } from './types';
+import type { AgentRunRequest, ActiveRunInfo, RendererAgentEvent, ExpertModelConfig, SubAgentResult } from './types';
 import type { ExecutionEngine } from '../engine/engine';
 import { resolveModel } from './model-resolver';
 import { createToolsForExpert } from './tools';
@@ -19,6 +19,7 @@ interface ActiveRun {
   runId: string;
   conversationId: string;
   expertId: string | null;
+  userContent: string;
   agent: Agent;
   unsubscribe: () => void;
   startedAt: number;
@@ -36,6 +37,10 @@ interface ExpertData {
 
 export class AgentRuntime {
   private activeRuns = new Map<string, ActiveRun>();
+  private runCompletions = new Map<string, {
+    resolve: (result: SubAgentResult) => void;
+    reject: (error: Error) => void;
+  }>();
   private backendPort: number;
   private executionEngine: ExecutionEngine | null = null;
 
@@ -45,6 +50,41 @@ export class AgentRuntime {
 
   setExecutionEngine(engine: ExecutionEngine): void {
     this.executionEngine = engine;
+  }
+
+  /**
+   * Wait for a run to complete. Used by delegation tools to wait for sub-agent results.
+   */
+  waitForCompletion(runId: string, timeoutMs = 120_000): Promise<SubAgentResult> {
+    return new Promise<SubAgentResult>((resolve, reject) => {
+      // If the run is already gone, it completed before we started waiting
+      const existing = this.activeRuns.get(runId);
+      if (!existing) {
+        reject(new Error(`Run ${runId} not found or already completed`));
+        return;
+      }
+
+      this.runCompletions.set(runId, { resolve, reject });
+
+      // Timeout guard
+      const timer = setTimeout(() => {
+        this.runCompletions.delete(runId);
+        reject(new Error(`Delegation timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      // Clean up timer when resolved/rejected
+      const original = this.runCompletions.get(runId)!;
+      this.runCompletions.set(runId, {
+        resolve: (result) => {
+          clearTimeout(timer);
+          original.resolve(result);
+        },
+        reject: (err) => {
+          clearTimeout(timer);
+          original.reject(err);
+        },
+      });
+    });
   }
 
   async startRun(
@@ -149,6 +189,8 @@ export class AgentRuntime {
       backendPort: this.backendPort,
       executionEngine: this.executionEngine ?? undefined,
       webContents,
+      agentRuntime: this as AgentRuntime,
+      parentRunId: runId,
     };
     const toolAccess = expertData?.tool_access ? JSON.parse(expertData.tool_access) : null;
     const tools = createToolsForExpert(toolCtx, toolAccess);
@@ -167,6 +209,7 @@ export class AgentRuntime {
       id: runId,
       expert_id: expertId || null,
       conversation_id: conversationId,
+      parent_run_id: request.parentRunId || null,
       status: 'running',
     }).catch(console.error);
 
@@ -174,6 +217,7 @@ export class AgentRuntime {
     const channel = `agent:event:${runId}`;
     const turnCount = { value: 0 };
     let accumulatedText = '';
+    const toolsUsed = new Set<string>();
 
     const unsubscribe = agent.subscribe((event: AgentEvent) => {
       // Track accumulated text for text_delta events
@@ -182,6 +226,11 @@ export class AgentRuntime {
         if (ame?.type === 'text_delta') {
           accumulatedText += ame.delta;
         }
+      }
+
+      // Track tools used
+      if (event.type === 'tool_execution_start') {
+        toolsUsed.add(event.toolName);
       }
 
       const translated = translateEvent(event, runId, turnCount);
@@ -196,6 +245,7 @@ export class AgentRuntime {
       runId,
       conversationId,
       expertId: expertId || null,
+      userContent: content,
       agent,
       unsubscribe,
       startedAt: Date.now(),
@@ -213,7 +263,18 @@ export class AgentRuntime {
       .prompt(content)
       .then(() => {
         activeRun.accumulatedText = accumulatedText;
-        this.finalizeRun(runId, 'completed', webContents, accumulatedText);
+        this.finalizeRun(runId, 'completed', webContents, accumulatedText, undefined, toolsUsed);
+
+        // Resolve any delegation waiters
+        const completion = this.runCompletions.get(runId);
+        if (completion) {
+          this.runCompletions.delete(runId);
+          completion.resolve({
+            runId,
+            status: 'completed',
+            messageContent: accumulatedText,
+          });
+        }
       })
       .catch((err: Error) => {
         activeRun.accumulatedText = accumulatedText;
@@ -225,7 +286,19 @@ export class AgentRuntime {
             error: errorMsg,
           } as RendererAgentEvent);
         }
-        this.finalizeRun(runId, 'error', webContents, accumulatedText, errorMsg);
+        this.finalizeRun(runId, 'error', webContents, accumulatedText, errorMsg, toolsUsed);
+
+        // Resolve any delegation waiters (with error status, not reject — let tool handle it)
+        const completion = this.runCompletions.get(runId);
+        if (completion) {
+          this.runCompletions.delete(runId);
+          completion.resolve({
+            runId,
+            status: 'error',
+            messageContent: accumulatedText,
+            error: errorMsg,
+          });
+        }
       });
 
     return runId;
@@ -236,6 +309,13 @@ export class AgentRuntime {
     if (!run) return false;
     run.agent.abort();
     this.finalizeRun(runId, 'cancelled', null, run.accumulatedText);
+
+    // Reject any delegation waiters
+    const completion = this.runCompletions.get(runId);
+    if (completion) {
+      this.runCompletions.delete(runId);
+      completion.reject(new Error('Run was cancelled'));
+    }
     return true;
   }
 
@@ -254,6 +334,7 @@ export class AgentRuntime {
     _webContents: WebContents | null,
     messageContent: string,
     error?: string,
+    toolsUsed?: Set<string>,
   ): void {
     const run = this.activeRuns.get(runId);
     if (!run) return;
@@ -266,6 +347,7 @@ export class AgentRuntime {
       status,
       completed_at: new Date().toISOString(),
       error: error || null,
+      tools_used: toolsUsed ? Array.from(toolsUsed) : null,
     }).catch(console.error);
 
     // Trigger memory extraction (fire-and-forget) if there's content
@@ -275,6 +357,7 @@ export class AgentRuntime {
       this.backendPost('/memory/extract', {
         conversation_id: run.conversationId,
         messages: [
+          { role: 'user', content: run.userContent },
           { role: 'assistant', content: messageContent },
         ],
         scope,
