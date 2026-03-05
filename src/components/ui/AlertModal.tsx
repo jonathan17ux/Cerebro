@@ -10,6 +10,7 @@ interface AlertAction {
   label: string;
   onClick: () => void;
   primary?: boolean;
+  variant?: 'default' | 'danger';
 }
 
 interface AlertModalProps {
@@ -49,19 +50,25 @@ export default function AlertModal({ icon, title, message, actions, onClose }: A
         </div>
         <div className="border-t border-border-subtle px-5 py-3 flex justify-end gap-2">
           {actions && actions.length > 0 ? (
-            actions.map((action) => (
-              <button
-                key={action.label}
-                onClick={action.onClick}
-                className={
-                  action.primary
-                    ? 'px-4 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20 transition-colors cursor-pointer'
-                    : 'px-4 py-1.5 rounded-md text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer'
-                }
-              >
-                {action.label}
-              </button>
-            ))
+            actions.map((action) => {
+              let className: string;
+              if (action.primary && action.variant === 'danger') {
+                className = 'px-4 py-1.5 rounded-md text-xs font-medium bg-red-500 text-white hover:bg-red-600 transition-colors cursor-pointer';
+              } else if (action.primary) {
+                className = 'px-4 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20 transition-colors cursor-pointer';
+              } else {
+                className = 'px-4 py-1.5 rounded-md text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer';
+              }
+              return (
+                <button
+                  key={action.label}
+                  onClick={action.onClick}
+                  className={className}
+                >
+                  {action.label}
+                </button>
+              );
+            })
           ) : (
             <button
               onClick={onClose}

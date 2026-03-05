@@ -1,10 +1,11 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Plus, Loader2, Search, RefreshCw } from 'lucide-react';
+import { Plus, Loader2, Search, RefreshCw, AlertCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { useRoutines } from '../../../context/RoutineContext';
 import type { CreateRoutineInput } from '../../../types/routines';
 import RoutineCard from './RoutineCard';
 import CreateRoutineDialog from './CreateRoutineDialog';
+import AlertModal from '../../ui/AlertModal';
 
 type Filter = 'all' | 'enabled' | 'scheduled' | 'manual';
 
@@ -12,6 +13,7 @@ export default function RoutineList() {
   const {
     routines,
     isLoading,
+    loadError,
     enabledCount,
     cronCount,
     loadRoutines,
@@ -25,6 +27,7 @@ export default function RoutineList() {
   const [showCreate, setShowCreate] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     loadRoutines();
@@ -75,6 +78,29 @@ export default function RoutineList() {
     return (
       <div className="flex-1 flex items-center justify-center">
         <Loader2 size={24} className="text-accent animate-spin" />
+      </div>
+    );
+  }
+
+  if (loadError && routines.length === 0) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center py-20">
+        <div className="w-16 h-16 rounded-xl border-2 border-dashed border-red-500/30 flex items-center justify-center mb-4">
+          <AlertCircle size={24} className="text-red-400" />
+        </div>
+        <h3 className="text-sm font-medium text-text-primary mb-1.5">
+          Failed to load routines
+        </h3>
+        <p className="text-xs text-text-tertiary mb-4 max-w-[280px] text-center">
+          {loadError}
+        </p>
+        <button
+          onClick={() => loadRoutines()}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-accent bg-accent/10 hover:bg-accent/20 border border-accent/20 rounded-lg transition-colors"
+        >
+          <RefreshCw size={14} />
+          Retry
+        </button>
       </div>
     );
   }
@@ -186,11 +212,7 @@ export default function RoutineList() {
                 onClick={() => setEditingRoutineId(routine.id)}
                 onToggle={() => toggleEnabled(routine)}
                 onRun={() => runRoutine(routine.id)}
-                onDelete={() => {
-                  if (window.confirm(`Delete "${routine.name}"? This cannot be undone.`)) {
-                    deleteRoutine(routine.id);
-                  }
-                }}
+                onDelete={() => setDeleteTarget({ id: routine.id, name: routine.name })}
               />
             ))}
           </div>
@@ -203,6 +225,27 @@ export default function RoutineList() {
         onClose={() => setShowCreate(false)}
         onCreate={handleCreate}
       />
+
+      {/* Delete Confirm Dialog */}
+      {deleteTarget && (
+        <AlertModal
+          title="Delete routine"
+          message={`Delete "${deleteTarget.name}"? This cannot be undone.`}
+          onClose={() => setDeleteTarget(null)}
+          actions={[
+            { label: 'Cancel', onClick: () => setDeleteTarget(null) },
+            {
+              label: 'Delete',
+              primary: true,
+              variant: 'danger',
+              onClick: () => {
+                deleteRoutine(deleteTarget.id);
+                setDeleteTarget(null);
+              },
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }

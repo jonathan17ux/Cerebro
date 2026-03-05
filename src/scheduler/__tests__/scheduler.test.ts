@@ -223,6 +223,52 @@ describe('RoutineScheduler', () => {
     expect(secondJob).toBe(firstJob); // Same object reference — not recreated
   });
 
+  // ── sync mutex ─────────────────────────────────────────────────
+
+  it('coalesces concurrent sync calls without overlapping', async () => {
+    const routines = [
+      {
+        id: 'r1',
+        name: 'Mutex Test',
+        trigger_type: 'cron',
+        cron_expression: '0 9 * * *',
+        is_enabled: true,
+        dag_json: JSON.stringify({ steps: [] }),
+        plain_english_steps: null,
+        default_runner_id: null,
+        approval_gates: null,
+      },
+    ];
+
+    server = createMockBackend(routines);
+    port = await listenOnRandomPort(server);
+    engine = makeMockEngine();
+    scheduler = new RoutineScheduler(engine, port);
+
+    // Spy on the private doSync method to track invocations
+    let doSyncCallCount = 0;
+    const originalDoSync = (scheduler as any).doSync.bind(scheduler);
+    (scheduler as any).doSync = async function () {
+      doSyncCallCount++;
+      return originalDoSync();
+    };
+
+    // Fire two sync calls concurrently
+    const p1 = scheduler.sync();
+    const p2 = scheduler.sync();
+
+    await p1;
+    await p2;
+
+    // Wait for the queued re-sync to complete
+    // The mutex fires re-sync as fire-and-forget, so give it a tick
+    await new Promise((r) => setTimeout(r, 200));
+
+    // First call runs doSync immediately, second is queued and runs once after first completes
+    expect(doSyncCallCount).toBe(2);
+    expect((scheduler as any).jobs.size).toBe(1);
+  });
+
   // ── stopAll() ──────────────────────────────────────────────────
 
   it('clears all jobs on stopAll', async () => {

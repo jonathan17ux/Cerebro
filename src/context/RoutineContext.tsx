@@ -10,6 +10,7 @@ import {
 import type { BackendResponse } from '../types/ipc';
 import type { Routine, ApiRoutine, CreateRoutineInput } from '../types/routines';
 import { toRoutine, toApiBody } from '../types/routines';
+import { useToast } from './ToastContext';
 
 // ── Context ────────────────────────────────────────────────────
 
@@ -19,6 +20,7 @@ interface RoutineContextValue {
   routines: Routine[];
   total: number;
   isLoading: boolean;
+  loadError: string | null;
   enabledCount: number;
   cronCount: number;
   editingRoutineId: string | null;
@@ -41,10 +43,12 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editingRoutineId, setEditingRoutineId] = useState<string | null>(null);
   const runCallbackRef = useRef<RunRoutineCallback | null>(null);
   const routinesRef = useRef<Routine[]>(routines);
   routinesRef.current = routines;
+  const { addToast } = useToast();
 
   const registerRunCallback = useCallback((cb: RunRoutineCallback) => {
     runCallbackRef.current = cb;
@@ -62,6 +66,7 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
 
   const loadRoutines = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const res: BackendResponse<{ routines: ApiRoutine[]; total: number }> =
         await window.cerebro.invoke({
@@ -71,9 +76,10 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         setRoutines(res.data.routines.map(toRoutine));
         setTotal(res.data.total);
+        setLoadError(null);
       }
-    } catch {
-      // Backend not ready
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Failed to load routines');
     } finally {
       setIsLoading(false);
     }
@@ -98,10 +104,11 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
         }
       } catch (e) {
         console.error('Failed to create routine:', e);
+        addToast('Failed to create routine', 'error');
       }
       return null;
     },
-    [],
+    [addToast],
   );
 
   const updateRoutine = useCallback(
@@ -121,9 +128,10 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
         }
       } catch (e) {
         console.error('Failed to update routine:', e);
+        addToast('Failed to update routine', 'error');
       }
     },
-    [],
+    [addToast],
   );
 
   const deleteRoutine = useCallback(async (id: string) => {
@@ -139,8 +147,9 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       console.error('Failed to delete routine:', e);
+      addToast('Failed to delete routine', 'error');
     }
-  }, []);
+  }, [addToast]);
 
   const toggleEnabled = useCallback(
     async (routine: Routine) => {
@@ -166,6 +175,7 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
         routines,
         total,
         isLoading,
+        loadError,
         enabledCount,
         cronCount,
         editingRoutineId,

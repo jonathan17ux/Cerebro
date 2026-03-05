@@ -17,6 +17,7 @@ import type { Routine, TriggerType } from '../../../types/routines';
 import type { SaveStatus } from '../../../hooks/useRoutineCanvas';
 import { useRoutines } from '../../../context/RoutineContext';
 import Toggle from '../../ui/Toggle';
+import AlertModal from '../../ui/AlertModal';
 import SchedulePicker from '../../ui/SchedulePicker';
 import type { DayOfWeek } from '../../../utils/cron-helpers';
 import { cronToSchedule, scheduleToCron, describeSchedule, WEEKDAYS } from '../../../utils/cron-helpers';
@@ -54,6 +55,7 @@ export default function EditorToolbar({
   const [name, setName] = useState(routine.name);
   const [showTriggerMenu, setShowTriggerMenu] = useState(false);
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
   const scheduleRef = useRef<HTMLDivElement>(null);
 
@@ -225,12 +227,7 @@ export default function EditorToolbar({
         </button>
 
         <button
-          onClick={() => {
-            if (window.confirm('Delete this routine?')) {
-              deleteRoutine(routine.id);
-              setEditingRoutineId(null);
-            }
-          }}
+          onClick={() => setShowDeleteConfirm(true)}
           className="p-1.5 rounded-md text-text-tertiary hover:text-red-400 hover:bg-red-400/10 transition-colors"
           title="Delete routine"
         >
@@ -288,6 +285,28 @@ export default function EditorToolbar({
           Run
         </button>
       </div>
+
+      {/* Delete Confirm Dialog */}
+      {showDeleteConfirm && (
+        <AlertModal
+          title="Delete routine"
+          message={`Delete "${routine.name}"? This cannot be undone.`}
+          onClose={() => setShowDeleteConfirm(false)}
+          actions={[
+            { label: 'Cancel', onClick: () => setShowDeleteConfirm(false) },
+            {
+              label: 'Delete',
+              primary: true,
+              variant: 'danger',
+              onClick: () => {
+                deleteRoutine(routine.id);
+                setShowDeleteConfirm(false);
+                setEditingRoutineId(null);
+              },
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }

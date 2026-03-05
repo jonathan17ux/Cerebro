@@ -38,6 +38,8 @@ export class RoutineScheduler {
   private webContents: WebContents | null = null;
   private jobs = new Map<string, ActiveJob>();
   private resyncTimer: ReturnType<typeof setInterval> | null = null;
+  private syncing = false;
+  private syncQueued = false;
 
   constructor(engine: ExecutionEngine, backendPort: number) {
     this.engine = engine;
@@ -68,9 +70,28 @@ export class RoutineScheduler {
 
   /**
    * Sync cron jobs with backend state.
-   * Removes stale jobs, adds/recreates changed ones.
+   * Uses a mutex to prevent concurrent syncs — if called while already syncing,
+   * queues one re-sync that runs after the current one completes.
    */
   async sync(): Promise<void> {
+    if (this.syncing) {
+      this.syncQueued = true;
+      return;
+    }
+    this.syncing = true;
+    try {
+      await this.doSync();
+    } finally {
+      this.syncing = false;
+      if (this.syncQueued) {
+        this.syncQueued = false;
+        this.sync();
+      }
+    }
+  }
+
+  /** Internal sync implementation. */
+  private async doSync(): Promise<void> {
     let routines: CronRoutine[];
     try {
       routines = await this.fetchCronRoutines();
