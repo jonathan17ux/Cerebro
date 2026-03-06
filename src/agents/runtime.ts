@@ -16,6 +16,7 @@ import { createEnhancedAgentConfig, createTurnGovernor, classifyModelTier } from
 import { createAgentLogger } from './logger';
 import { OrchestrationTracker } from './orchestration-tracker';
 
+/** Cap concurrent agents to prevent resource exhaustion (each run holds an HTTP stream + tools). */
 const MAX_CONCURRENT_RUNS = 5;
 
 interface ActiveRun {
@@ -411,6 +412,7 @@ export class AgentRuntime {
       completion.resolve(result);
     } else {
       this.completedResults.set(runId, result);
+      // 5-minute eviction — generous buffer beyond the 120s delegation timeout
       setTimeout(() => this.completedResults.delete(runId), 300_000);
     }
   }

@@ -7,6 +7,7 @@ const smallConfig: TierConfig = {
   contextBudget: 100,  // Very low for testing (~400 chars)
   compressionThreshold: 200,
   loopThreshold: 2,
+  assistantTruncation: 150,
 };
 
 const largeConfig: TierConfig = {
@@ -14,6 +15,7 @@ const largeConfig: TierConfig = {
   contextBudget: 100_000,  // Very high — should pass through
   compressionThreshold: 8000,
   loopThreshold: 3,
+  assistantTruncation: 800,
 };
 
 function userMsg(text: string) {

@@ -7,6 +7,7 @@ const testConfig: TierConfig = {
   contextBudget: 4000,
   compressionThreshold: 2000,
   loopThreshold: 2,
+  assistantTruncation: 150,
 };
 
 function createMockAgent() {

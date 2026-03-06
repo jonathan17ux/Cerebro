@@ -9,6 +9,7 @@ import type { AgentTool } from '@mariozechner/pi-agent-core';
 import type { ToolContext, RendererAgentEvent, SubAgentResult } from '../types';
 import { resolveModel } from '../model-resolver';
 import { classifyModelTier, type ModelTier } from '../loop/model-tiers';
+import type { ResolvedModel } from '../types';
 import { backendRequest, textResult, isSimilarName } from './tool-utils';
 
 interface ExpertRecord {
@@ -162,6 +163,7 @@ export function createDelegateToExpert(ctx: ToolContext): AgentTool {
 
       // Wait for completion
       try {
+        // 120s timeout — typical LLM response time + tool execution for a sub-agent
         const result = await ctx.agentRuntime.waitForCompletion(childRunId, 120_000);
         ctx.orchestrationTracker?.recordDelegationEnd(childRunId, result.status, Date.now() - delegationStart);
 
@@ -287,8 +289,16 @@ function emitTeamEvent(ctx: ToolContext, event: RendererAgentEvent): void {
 /**
  * POST to backend SSE endpoint, collect all text_delta events into a string.
  * Used for coordinator operations: strategy selection and result synthesis.
+ *
+ * @param resolvedModel - The resolved model to use. When targeting /cloud/chat,
+ *   the provider and model fields are required by the backend's CloudChatRequest schema.
  */
-async function singleShotInference(prompt: string, backendPort: number, timeoutMs = 60_000): Promise<string> {
+async function singleShotInference(
+  prompt: string,
+  backendPort: number,
+  resolvedModel?: ResolvedModel | null,
+  timeoutMs = 60_000,
+): Promise<string> {
   // Determine which endpoint to use
   let endpoint = '/cloud/chat';
   try {
@@ -303,6 +313,11 @@ async function singleShotInference(prompt: string, backendPort: number, timeoutM
   const body = JSON.stringify({
     messages: [{ role: 'user', content: prompt }],
     stream: true,
+    // Include provider/model when using cloud endpoint (required by CloudChatRequest schema)
+    ...(endpoint === '/cloud/chat' && resolvedModel?.provider && {
+      provider: resolvedModel.provider,
+      model: resolvedModel.modelId,
+    }),
   });
 
   return new Promise<string>((resolve, reject) => {
@@ -362,7 +377,7 @@ async function singleShotInference(prompt: string, backendPort: number, timeoutM
   });
 }
 
-function selectStrategySmall(team: TeamExpertRecord, task: string): 'sequential' | 'parallel' {
+export function selectStrategySmall(team: TeamExpertRecord, task: string): 'sequential' | 'parallel' {
   const taskLower = task.toLowerCase();
   const parallelKeywords = [
     'simultaneously', 'at the same time', 'in parallel', 'independently',
@@ -403,6 +418,7 @@ async function selectStrategyMedium(
   task: string,
   memberNames: string[],
   backendPort: number,
+  resolvedModel?: ResolvedModel | null,
 ): Promise<'sequential' | 'parallel'> {
   const prompt = `You are a task routing assistant. Given a task and team members, decide the execution strategy.
 
@@ -414,7 +430,7 @@ Respond with exactly one word: "sequential" or "parallel".
 - Use "parallel" when members can work independently.`;
 
   try {
-    const result = (await singleShotInference(prompt, backendPort)).trim().toLowerCase();
+    const result = (await singleShotInference(prompt, backendPort, resolvedModel)).trim().toLowerCase();
     if (result.includes('parallel')) return 'parallel';
     return 'sequential';
   } catch {
@@ -428,6 +444,7 @@ async function selectStrategy(
   task: string,
   override: string | undefined,
   backendPort: number,
+  resolvedModel?: ResolvedModel | null,
 ): Promise<'sequential' | 'parallel'> {
   // Explicit override from team config
   if (team.strategy && team.strategy !== 'auto') {
@@ -447,10 +464,11 @@ async function selectStrategy(
   }
 
   // Medium and large: use LLM-based selection
-  return selectStrategyMedium(task, memberNames, backendPort);
+  return selectStrategyMedium(task, memberNames, backendPort, resolvedModel);
 }
 
-function distillContext(previousContext: string, memberRole: string, memberResponse: string, tier: ModelTier): string {
+export function distillContext(previousContext: string, memberRole: string, memberResponse: string, tier: ModelTier): string {
+  // Proportional to tier context budgets: small=4K, medium=16K, large=32K tokens
   const maxLen = tier === 'small' ? 500 : tier === 'medium' ? 1500 : 3000;
 
   let trimmed: string;
@@ -480,6 +498,7 @@ async function synthesizeResults(
   memberResults: MemberResult[],
   playbook: string | null,
   backendPort: number,
+  resolvedModel?: ResolvedModel | null,
 ): Promise<string> {
   const successResults = memberResults.filter((r) => r.status === 'completed');
   const failedResults = memberResults.filter((r) => r.status === 'error');
@@ -499,8 +518,8 @@ async function synthesizeResults(
     return result;
   }
 
-  // Truncate member outputs proportionally so we don't blow token budgets
-  const maxPerMember = tier === 'medium' ? 1500 : 3000;
+  // Truncate member outputs proportionally to tier context budgets
+  const maxPerMember = tier === 'medium' ? 1500 : 3000; // chars per member in synthesis prompt
   const memberOutputs = successResults
     .map((r) => `### ${r.memberName} (${r.role})\n${r.content.slice(0, maxPerMember)}`)
     .join('\n\n');
@@ -555,7 +574,7 @@ Format your response as:
   }
 
   try {
-    return await singleShotInference(prompt, backendPort);
+    return await singleShotInference(prompt, backendPort, resolvedModel);
   } catch {
     // Fallback to concatenation if synthesis inference fails
     return successResults.map((r) => `## ${r.memberName} (${r.role})\n${r.content}`).join('\n\n');
@@ -797,19 +816,21 @@ export function createDelegateToTeam(ctx: ToolContext): AgentTool {
         return textResult(`Team "${team.name}" has no members configured.`);
       }
 
-      // Resolve member names by fetching each expert
-      for (const member of members) {
-        try {
-          const expert = await backendRequest<ExpertRecord>(
-            ctx.backendPort,
-            'GET',
-            `/experts/${member.expert_id}`,
-          );
-          member.name = expert.name;
-        } catch {
-          member.name = member.role;
-        }
-      }
+      // Resolve member names in parallel (instead of sequential N+1 requests)
+      await Promise.allSettled(
+        members.map(async (member) => {
+          try {
+            const expert = await backendRequest<ExpertRecord>(
+              ctx.backendPort,
+              'GET',
+              `/experts/${member.expert_id}`,
+            );
+            member.name = expert.name;
+          } catch {
+            member.name = member.role;
+          }
+        }),
+      );
 
       // Load playbook (non-critical)
       let playbook: string | null = null;
@@ -829,7 +850,7 @@ export function createDelegateToTeam(ctx: ToolContext): AgentTool {
       const tier: ModelTier = resolvedModel ? classifyModelTier(resolvedModel) : 'medium';
 
       // Select strategy
-      const strategy = await selectStrategy(tier, team, params.task, params.strategy_override, ctx.backendPort);
+      const strategy = await selectStrategy(tier, team, params.task, params.strategy_override, ctx.backendPort, resolvedModel);
 
       // Emit team_started
       emitTeamEvent(ctx, {
@@ -903,7 +924,7 @@ export function createDelegateToTeam(ctx: ToolContext): AgentTool {
 
       // Synthesize
       emitTeamEvent(ctx, { type: 'team_synthesis', teamId: team.id });
-      const synthesized = await synthesizeResults(tier, team, params.task, results, playbook, ctx.backendPort);
+      const synthesized = await synthesizeResults(tier, team, params.task, results, playbook, ctx.backendPort, resolvedModel);
 
       // Emit team_completed
       emitTeamEvent(ctx, {

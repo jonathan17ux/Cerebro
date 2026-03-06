@@ -8,8 +8,11 @@ import crypto from 'node:crypto';
 import type { AgentTool } from '@mariozechner/pi-agent-core';
 import type { TierConfig } from './model-tiers';
 
+/** Standard tool timeout — allows for one backend request + LLM inference cycle. */
 const DEFAULT_TOOL_TIMEOUT_MS = 30_000;
+/** Delegation tools need longer — sub-agent may make multiple tool calls of its own. */
 const DELEGATION_TOOL_TIMEOUT_MS = 180_000;
+/** FIFO eviction cap — prevents unbounded memory growth in long-running agents. */
 const MAX_DEDUP_CACHE_SIZE = 100;
 
 const DELEGATION_TOOLS = new Set(['delegate_to_expert', 'delegate_to_team']);

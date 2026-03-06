@@ -197,28 +197,24 @@ export class OrchestrationTracker {
         order_index: order,
         input_json: input ? JSON.stringify(input) : null,
       },
-    ]).then(() => {
-      // Update total_steps on run record after step creation
-      this.backendRequest('PATCH', `/engine/runs/${this.runId}`, {
-        total_steps: this.stepSeq,
-      }).catch(() => {});
-    }).catch(() => {});
+    ]).catch((err) => {
+      console.warn(`[OrchestrationTracker] Failed to add step ${stepId} for run ${this.runId}:`, err);
+    });
+    // Note: total_steps/completed_steps are sent authoritatively in finalize()
   }
 
   private patchStep(stepId: string, status: string, durationMs?: number): void {
+    if (status === 'completed' || status === 'failed') {
+      this.completedSteps++;
+    }
     this.backendRequest('PATCH', `/engine/runs/${this.runId}/steps/${stepId}`, {
       status,
       completed_at: new Date().toISOString(),
       ...(durationMs !== undefined && { duration_ms: durationMs }),
-    }).then(() => {
-      // Update completed_steps on terminal status
-      if (status === 'completed' || status === 'failed') {
-        this.completedSteps++;
-        this.backendRequest('PATCH', `/engine/runs/${this.runId}`, {
-          completed_steps: this.completedSteps,
-        }).catch(() => {});
-      }
-    }).catch(() => {});
+    }).catch((err) => {
+      console.warn(`[OrchestrationTracker] Failed to patch step ${stepId} for run ${this.runId}:`, err);
+    });
+    // Note: total_steps/completed_steps are sent authoritatively in finalize()
   }
 
   private bufferEvent(type: string, stepId: string | null, payload: Record<string, unknown>): void {

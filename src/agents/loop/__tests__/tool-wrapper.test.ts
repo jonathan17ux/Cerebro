@@ -7,6 +7,7 @@ const testConfig: TierConfig = {
   contextBudget: 4000,
   compressionThreshold: 100,  // Low threshold for testing compression
   loopThreshold: 2,
+  assistantTruncation: 150,
 };
 
 function makeTool(name: string, executeFn: (...args: any[]) => Promise<any>) {

@@ -17,6 +17,8 @@ export interface TierConfig {
   compressionThreshold: number;
   /** Number of identical tool calls before loop detection fires. */
   loopThreshold: number;
+  /** Max chars to keep when truncating old assistant messages during context pruning. */
+  assistantTruncation: number;
 }
 
 const TIER_CONFIGS: Record<ModelTier, TierConfig> = {
@@ -25,18 +27,21 @@ const TIER_CONFIGS: Record<ModelTier, TierConfig> = {
     contextBudget: 4_000,   // ~16K chars
     compressionThreshold: 800,
     loopThreshold: 2,
+    assistantTruncation: 150, // minimal — preserve intent only
   },
   medium: {
     maxTurns: 8,
     contextBudget: 16_000,  // ~64K chars
     compressionThreshold: 2_000,
     loopThreshold: 3,
+    assistantTruncation: 400, // moderate — keep key reasoning
   },
   large: {
     maxTurns: 15,
     contextBudget: 32_000,  // ~128K chars
     compressionThreshold: 8_000,
     loopThreshold: 3,
+    assistantTruncation: 800, // generous — preserve reasoning depth
   },
 };
 

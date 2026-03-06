@@ -77,13 +77,13 @@ export function createContextTransform(tierConfig: TierConfig) {
     const safeStart = preserveStart >= 0 ? preserveStart + 1 : 0;
     const safeEnd = result.length - preserveFromEnd;
 
-    // Phase 1: Replace old tool results with summaries
+    // Phase 1: Replace old tool results with one-line summaries
     for (let i = safeStart; i < safeEnd; i++) {
       if (isToolResult(result[i])) {
         const original = serializeMessage(result[i]);
-        if (original.length > 100) {
+        if (original.length > 100) { // only compress results with meaningful content
           const msg = result[i] as Record<string, unknown>;
-          const summary = original.slice(0, 80) + '... (truncated)';
+          const summary = original.slice(0, 80) + '... (truncated)'; // ~one-line preview
           result[i] = {
             role: 'toolResult',
             toolCallId: msg.toolCallId,
@@ -100,15 +100,16 @@ export function createContextTransform(tierConfig: TierConfig) {
       return result;
     }
 
-    // Phase 2: Truncate old assistant messages
+    // Phase 2: Truncate old assistant messages (limit is tier-aware)
+    const truncLimit = tierConfig.assistantTruncation;
     for (let i = safeStart; i < safeEnd; i++) {
       if (isAssistant(result[i])) {
         const text = serializeMessage(result[i]);
-        if (text.length > 200) {
+        if (text.length > truncLimit) {
           const msg = result[i] as Record<string, unknown>;
           result[i] = {
             ...msg,
-            content: [{ type: 'text', text: text.slice(0, 200) + '... (truncated)' }],
+            content: [{ type: 'text', text: text.slice(0, truncLimit) + '... (truncated)' }],
           };
         }
       }
