@@ -559,6 +559,11 @@ function registerIpcHandlers(): void {
     return executionEngine.getActiveRuns();
   });
 
+  ipcMain.handle(IPC_CHANNELS.ENGINE_GET_EVENTS, async (_event, runId: string) => {
+    if (!executionEngine) return [];
+    return executionEngine.getBufferedEvents(runId);
+  });
+
   // --- Scheduler ---
 
   ipcMain.handle(IPC_CHANNELS.SCHEDULER_SYNC, async () => {

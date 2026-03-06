@@ -23,6 +23,7 @@ export interface ToolCall {
   status: ToolCallStatus;
   startedAt?: Date;
   completedAt?: Date;
+  delegationExpertName?: string;
 }
 
 export interface RoutineProposal {
@@ -37,6 +38,17 @@ export interface RoutineProposal {
   status: 'proposed' | 'previewing' | 'saved' | 'dismissed';
   savedRoutineId?: string;
   previewRunId?: string;
+}
+
+export interface ExpertProposal {
+  name: string;
+  description: string;
+  domain: string;
+  systemPrompt: string;
+  toolAccess: string[];
+  suggestedContextFile?: string;
+  status: 'proposed' | 'previewing' | 'saved' | 'dismissed';
+  savedExpertId?: string;
 }
 
 export interface Message {
@@ -55,6 +67,7 @@ export interface Message {
   engineRunId?: string;
   isPreviewRun?: boolean;
   routineProposal?: RoutineProposal;
+  expertProposal?: ExpertProposal;
 }
 
 export interface Conversation {

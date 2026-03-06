@@ -3,53 +3,10 @@
  * recall_facts, recall_knowledge, save_fact, save_entry
  */
 
-import http from 'node:http';
 import { Type } from '@sinclair/typebox';
-import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import type { AgentTool } from '@mariozechner/pi-agent-core';
 import type { ToolContext } from '../types';
-
-function backendRequest<T>(port: number, method: string, path: string, body?: unknown): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const bodyStr = body ? JSON.stringify(body) : undefined;
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (bodyStr) headers['Content-Length'] = Buffer.byteLength(bodyStr).toString();
-
-    const req = http.request(
-      {
-        hostname: '127.0.0.1',
-        port,
-        path,
-        method,
-        headers,
-        timeout: 10_000,
-      },
-      (res) => {
-        let data = '';
-        res.on('data', (chunk: Buffer) => {
-          data += chunk.toString();
-        });
-        res.on('end', () => {
-          try {
-            resolve(JSON.parse(data) as T);
-          } catch {
-            resolve(data as T);
-          }
-        });
-      },
-    );
-    req.on('error', reject);
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Request timed out'));
-    });
-    if (bodyStr) req.write(bodyStr);
-    req.end();
-  });
-}
-
-function textResult(text: string): AgentToolResult<void> {
-  return { content: [{ type: 'text', text }], details: undefined as any };
-}
+import { backendRequest, textResult } from './tool-utils';
 
 export function createRecallFacts(ctx: ToolContext): AgentTool {
   return {
@@ -64,16 +21,20 @@ export function createRecallFacts(ctx: ToolContext): AgentTool {
       const search = encodeURIComponent(params.query);
       const scope = ctx.scope;
       const scopeId = ctx.scopeId ? `&scope_id=${ctx.scopeId}` : '';
-      const res = await backendRequest<{ items: Array<{ content: string }> }>(
-        ctx.backendPort,
-        'GET',
-        `/memory/items?scope=${scope}${scopeId}&search=${search}&limit=10`,
-      );
-      if (!res.items || res.items.length === 0) {
-        return textResult('No relevant facts found.');
+      try {
+        const res = await backendRequest<{ items: Array<{ content: string }> }>(
+          ctx.backendPort,
+          'GET',
+          `/memory/items?scope=${scope}${scopeId}&search=${search}&limit=10`,
+        );
+        if (!res.items || res.items.length === 0) {
+          return textResult('No relevant facts found.');
+        }
+        const lines = res.items.map((item) => `- ${item.content}`);
+        return textResult(`Found ${res.items.length} relevant facts:\n${lines.join('\n')}`);
+      } catch (err) {
+        return textResult(`Failed to recall facts: ${err instanceof Error ? err.message : String(err)}`);
       }
-      const lines = res.items.map((item) => `- ${item.content}`);
-      return textResult(`Found ${res.items.length} relevant facts:\n${lines.join('\n')}`);
     },
   };
 }
@@ -91,22 +52,26 @@ export function createRecallKnowledge(ctx: ToolContext): AgentTool {
       const search = encodeURIComponent(params.query);
       const scope = ctx.scope;
       const scopeId = ctx.scopeId ? `&scope_id=${ctx.scopeId}` : '';
-      const res = await backendRequest<{
-        entries: Array<{ summary: string; entry_type: string; occurred_at: string }>;
-      }>(
-        ctx.backendPort,
-        'GET',
-        `/memory/knowledge?scope=${scope}${scopeId}&search=${search}&limit=10`,
-      );
-      if (!res.entries || res.entries.length === 0) {
-        return textResult('No relevant knowledge entries found.');
+      try {
+        const res = await backendRequest<{
+          entries: Array<{ summary: string; entry_type: string; occurred_at: string }>;
+        }>(
+          ctx.backendPort,
+          'GET',
+          `/memory/knowledge?scope=${scope}${scopeId}&search=${search}&limit=10`,
+        );
+        if (!res.entries || res.entries.length === 0) {
+          return textResult('No relevant knowledge entries found.');
+        }
+        const lines = res.entries.map(
+          (e) => `- [${e.entry_type}] ${e.summary} (${e.occurred_at})`,
+        );
+        return textResult(
+          `Found ${res.entries.length} relevant entries:\n${lines.join('\n')}`,
+        );
+      } catch (err) {
+        return textResult(`Failed to recall knowledge: ${err instanceof Error ? err.message : String(err)}`);
       }
-      const lines = res.entries.map(
-        (e) => `- [${e.entry_type}] ${e.summary} (${e.occurred_at})`,
-      );
-      return textResult(
-        `Found ${res.entries.length} relevant entries:\n${lines.join('\n')}`,
-      );
     },
   };
 }
@@ -123,13 +88,17 @@ export function createSaveFact(ctx: ToolContext): AgentTool {
       }),
     }),
     execute: async (_toolCallId, params) => {
-      await backendRequest(ctx.backendPort, 'POST', '/memory/items', {
-        scope: ctx.scope,
-        scope_id: ctx.scopeId,
-        content: params.content,
-        source_conversation_id: ctx.conversationId,
-      });
-      return textResult(`Saved fact: "${params.content}"`);
+      try {
+        await backendRequest(ctx.backendPort, 'POST', '/memory/items', {
+          scope: ctx.scope,
+          scope_id: ctx.scopeId,
+          content: params.content,
+          source_conversation_id: ctx.conversationId,
+        });
+        return textResult(`Saved fact: "${params.content}"`);
+      } catch (err) {
+        return textResult(`Failed to save fact: ${err instanceof Error ? err.message : String(err)}`);
+      }
     },
   };
 }
@@ -148,17 +117,21 @@ export function createSaveEntry(ctx: ToolContext): AgentTool {
       }),
     }),
     execute: async (_toolCallId, params) => {
-      await backendRequest(ctx.backendPort, 'POST', '/memory/knowledge', {
-        scope: ctx.scope,
-        scope_id: ctx.scopeId,
-        entry_type: params.entry_type,
-        occurred_at: new Date().toISOString(),
-        summary: params.summary,
-        content: params.content,
-        source: 'agent',
-        source_conversation_id: ctx.conversationId,
-      });
-      return textResult(`Saved ${params.entry_type} entry: "${params.summary}"`);
+      try {
+        await backendRequest(ctx.backendPort, 'POST', '/memory/knowledge', {
+          scope: ctx.scope,
+          scope_id: ctx.scopeId,
+          entry_type: params.entry_type,
+          occurred_at: new Date().toISOString(),
+          summary: params.summary,
+          content: params.content,
+          source: 'agent',
+          source_conversation_id: ctx.conversationId,
+        });
+        return textResult(`Saved ${params.entry_type} entry: "${params.summary}"`);
+      } catch (err) {
+        return textResult(`Failed to save entry: ${err instanceof Error ? err.message : String(err)}`);
+      }
     },
   };
 }

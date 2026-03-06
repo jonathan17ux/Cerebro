@@ -4,12 +4,9 @@
 
 import http from 'node:http';
 import { Type } from '@sinclair/typebox';
-import type { AgentTool, AgentToolResult } from '@mariozechner/pi-agent-core';
+import type { AgentTool } from '@mariozechner/pi-agent-core';
 import type { ToolContext } from '../types';
-
-function textResult(text: string): AgentToolResult<void> {
-  return { content: [{ type: 'text', text }], details: undefined as any };
-}
+import { textResult } from './tool-utils';
 
 export function createGetCurrentTime(): AgentTool {
   return {

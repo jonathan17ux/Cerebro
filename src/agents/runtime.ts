@@ -12,6 +12,8 @@ import { resolveModel } from './model-resolver';
 import { createToolsForExpert } from './tools';
 import { createExpertAgent } from './create-agent';
 import { translateEvent } from './events';
+import { createEnhancedAgentConfig, createTurnGovernor, classifyModelTier } from './loop';
+import { createAgentLogger } from './logger';
 
 const MAX_CONCURRENT_RUNS = 5;
 
@@ -22,6 +24,7 @@ interface ActiveRun {
   userContent: string;
   agent: Agent;
   unsubscribe: () => void;
+  governorUnsub: (() => void) | null;
   startedAt: number;
   accumulatedText: string;
 }
@@ -41,6 +44,8 @@ export class AgentRuntime {
     resolve: (result: SubAgentResult) => void;
     reject: (error: Error) => void;
   }>();
+  /** Cache for results that arrived before waitForCompletion was called. */
+  private completedResults = new Map<string, SubAgentResult>();
   private backendPort: number;
   private executionEngine: ExecutionEngine | null = null;
 
@@ -57,14 +62,26 @@ export class AgentRuntime {
    */
   waitForCompletion(runId: string, timeoutMs = 120_000): Promise<SubAgentResult> {
     return new Promise<SubAgentResult>((resolve, reject) => {
-      // If the run is already gone, it completed before we started waiting
-      const existing = this.activeRuns.get(runId);
-      if (!existing) {
-        reject(new Error(`Run ${runId} not found or already completed`));
+      // Check the completed results cache first (run finished before we started waiting)
+      const cached = this.completedResults.get(runId);
+      if (cached) {
+        this.completedResults.delete(runId);
+        resolve(cached);
         return;
       }
 
+      // Register the waiter
       this.runCompletions.set(runId, { resolve, reject });
+
+      // TOCTOU double-check: result may have arrived between the cache check and
+      // the waiter registration above
+      const cachedAfter = this.completedResults.get(runId);
+      if (cachedAfter) {
+        this.completedResults.delete(runId);
+        this.runCompletions.delete(runId);
+        resolve(cachedAfter);
+        return;
+      }
 
       // Timeout guard
       const timer = setTimeout(() => {
@@ -120,6 +137,9 @@ export class AgentRuntime {
       throw new Error('No model is currently available. Go to Integrations to configure a model.');
     }
 
+    // Classify model tier early (used for memory recall limits and enhanced loop)
+    const tier = classifyModelTier(resolvedModel);
+
     // Fetch memory-assembled system prompt
     let systemPrompt = expertData?.system_prompt || '';
     try {
@@ -134,6 +154,7 @@ export class AgentRuntime {
           scope_id: scopeId,
           include_expert_catalog: isPersonalScope,
           include_routine_catalog: isPersonalScope,
+          model_tier: tier,
         },
       );
       if (memoryRes?.system_prompt) {
@@ -144,18 +165,25 @@ export class AgentRuntime {
     }
 
     // Inject recent conversation history so the LLM has multi-turn context.
-    // Truncate individual messages to avoid blowing the token budget.
+    // Cap at 10 most recent messages and 2000 total chars to bound prompt size.
     if (request.recentMessages && request.recentMessages.length > 0) {
       const MAX_MSG_CHARS = 500;
-      const transcript = request.recentMessages
-        .map((m) => {
-          const tag = m.role === 'user' ? 'user' : 'assistant';
-          const text = m.content.length > MAX_MSG_CHARS
-            ? m.content.slice(0, MAX_MSG_CHARS) + '...(truncated)'
-            : m.content;
-          return `<${tag}>${text}</${tag}>`;
-        })
-        .join('\n');
+      const MAX_MESSAGES = 10;
+      const MAX_TOTAL_CHARS = 2000;
+      const recent = request.recentMessages.slice(-MAX_MESSAGES);
+      const lines: string[] = [];
+      let totalChars = 0;
+      for (const m of recent) {
+        const tag = m.role === 'user' ? 'user' : 'assistant';
+        const text = m.content.length > MAX_MSG_CHARS
+          ? m.content.slice(0, MAX_MSG_CHARS) + '...(truncated)'
+          : m.content;
+        const line = `<${tag}>${text}</${tag}>`;
+        if (totalChars + line.length > MAX_TOTAL_CHARS && lines.length > 0) break;
+        lines.push(line);
+        totalChars += line.length;
+      }
+      const transcript = lines.join('\n');
       systemPrompt += `\n\n## Recent Conversation History\nThe following is the recent conversation with the user. Use this context to understand follow-ups, avoid repeating yourself, and maintain conversational continuity.\n\n${transcript}`;
     }
 
@@ -191,18 +219,28 @@ export class AgentRuntime {
       webContents,
       agentRuntime: this as AgentRuntime,
       parentRunId: runId,
+      delegationDepth: request.delegationDepth ?? 0,
     };
     const toolAccess = expertData?.tool_access ? JSON.parse(expertData.tool_access) : null;
-    const tools = createToolsForExpert(toolCtx, toolAccess);
+    const rawTools = createToolsForExpert(toolCtx, toolAccess);
 
-    // Create agent
+    // Apply enhanced loop: wrap tools, append tier guidance, create context transform
+    const enhanced = createEnhancedAgentConfig(resolvedModel, rawTools, systemPrompt);
+    const toolNames = enhanced.tools.map((t) => t.name);
+
+    // Create agent with enhanced config
     const agent = createExpertAgent({
-      systemPrompt,
+      systemPrompt: enhanced.systemPrompt,
       resolvedModel,
-      tools,
+      tools: enhanced.tools,
       backendPort: this.backendPort,
-      maxTurns: expertData?.max_turns ?? 10,
+      maxTurns: expertData?.max_turns ?? enhanced.tierConfig.maxTurns,
+      transformContext: enhanced.transformContext as any,
+      toolNames,
     });
+
+    const log = createAgentLogger(runId);
+    log.info('Starting run', { conversationId, expertId: expertId || 'cerebro', model: resolvedModel.displayName });
 
     // Create agent run record in backend
     this.backendPost('/agent-runs', {
@@ -213,24 +251,37 @@ export class AgentRuntime {
       status: 'running',
     }).catch(console.error);
 
-    // Subscribe to events
+    // Construct activeRun before subscribing so the callback writes directly
+    // to activeRun.accumulatedText (no separate closure variable).
     const channel = `agent:event:${runId}`;
     const turnCount = { value: 0 };
-    let accumulatedText = '';
     const toolsUsed = new Set<string>();
 
+    const activeRun: ActiveRun = {
+      runId,
+      conversationId,
+      expertId: expertId || null,
+      userContent: content,
+      agent,
+      unsubscribe: () => {}, // placeholder, set after subscribe
+      governorUnsub: null,
+      startedAt: Date.now(),
+      accumulatedText: '',
+    };
+
     const unsubscribe = agent.subscribe((event: AgentEvent) => {
-      // Track accumulated text for text_delta events
+      // Track accumulated text — write directly to activeRun
       if (event.type === 'message_update') {
         const ame = (event as any).assistantMessageEvent;
         if (ame?.type === 'text_delta') {
-          accumulatedText += ame.delta;
+          activeRun.accumulatedText += ame.delta;
         }
       }
 
       // Track tools used
       if (event.type === 'tool_execution_start') {
         toolsUsed.add(event.toolName);
+        log.debug('Tool call', { tool: event.toolName });
       }
 
       const translated = translateEvent(event, runId, turnCount);
@@ -241,16 +292,11 @@ export class AgentRuntime {
       }
     });
 
-    const activeRun: ActiveRun = {
-      runId,
-      conversationId,
-      expertId: expertId || null,
-      userContent: content,
-      agent,
-      unsubscribe,
-      startedAt: Date.now(),
-      accumulatedText: '',
-    };
+    activeRun.unsubscribe = unsubscribe;
+
+    // Attach turn governor for turn limits & loop detection
+    activeRun.governorUnsub = createTurnGovernor(agent, enhanced.tierConfig);
+
     this.activeRuns.set(runId, activeRun);
 
     // Emit run_start
@@ -262,23 +308,20 @@ export class AgentRuntime {
     agent
       .prompt(content)
       .then(() => {
-        activeRun.accumulatedText = accumulatedText;
-        this.finalizeRun(runId, 'completed', webContents, accumulatedText, undefined, toolsUsed);
+        log.info('Run completed', { text_length: activeRun.accumulatedText.length });
+        this.finalizeRun(runId, 'completed', webContents, activeRun.accumulatedText, undefined, toolsUsed);
 
         // Resolve any delegation waiters
-        const completion = this.runCompletions.get(runId);
-        if (completion) {
-          this.runCompletions.delete(runId);
-          completion.resolve({
-            runId,
-            status: 'completed',
-            messageContent: accumulatedText,
-          });
-        }
+        const result: SubAgentResult = {
+          runId,
+          status: 'completed',
+          messageContent: activeRun.accumulatedText,
+        };
+        this.resolveOrCacheResult(runId, result);
       })
       .catch((err: Error) => {
-        activeRun.accumulatedText = accumulatedText;
         const errorMsg = err.message || 'Agent run failed';
+        log.error('Run failed', { error: errorMsg });
         if (!webContents.isDestroyed()) {
           webContents.send(channel, {
             type: 'error',
@@ -286,19 +329,16 @@ export class AgentRuntime {
             error: errorMsg,
           } as RendererAgentEvent);
         }
-        this.finalizeRun(runId, 'error', webContents, accumulatedText, errorMsg, toolsUsed);
+        this.finalizeRun(runId, 'error', webContents, activeRun.accumulatedText, errorMsg, toolsUsed);
 
         // Resolve any delegation waiters (with error status, not reject — let tool handle it)
-        const completion = this.runCompletions.get(runId);
-        if (completion) {
-          this.runCompletions.delete(runId);
-          completion.resolve({
-            runId,
-            status: 'error',
-            messageContent: accumulatedText,
-            error: errorMsg,
-          });
-        }
+        const result: SubAgentResult = {
+          runId,
+          status: 'error',
+          messageContent: activeRun.accumulatedText,
+          error: errorMsg,
+        };
+        this.resolveOrCacheResult(runId, result);
       });
 
     return runId;
@@ -316,6 +356,14 @@ export class AgentRuntime {
       this.runCompletions.delete(runId);
       completion.reject(new Error('Run was cancelled'));
     }
+
+    // Cascade cancellation to child delegation runs
+    const prefix = `delegate:${runId}:`;
+    for (const [childRunId, childRun] of this.activeRuns) {
+      if (childRun.conversationId.startsWith(prefix)) {
+        this.cancelRun(childRunId);
+      }
+    }
     return true;
   }
 
@@ -326,6 +374,21 @@ export class AgentRuntime {
       expertId: run.expertId,
       startedAt: run.startedAt,
     }));
+  }
+
+  /**
+   * Resolve a delegation waiter, or cache the result if no waiter is registered yet.
+   * Auto-evicts cached results after 5 minutes.
+   */
+  private resolveOrCacheResult(runId: string, result: SubAgentResult): void {
+    const completion = this.runCompletions.get(runId);
+    if (completion) {
+      this.runCompletions.delete(runId);
+      completion.resolve(result);
+    } else {
+      this.completedResults.set(runId, result);
+      setTimeout(() => this.completedResults.delete(runId), 300_000);
+    }
   }
 
   private finalizeRun(
@@ -340,6 +403,7 @@ export class AgentRuntime {
     if (!run) return;
 
     run.unsubscribe();
+    run.governorUnsub?.();
     this.activeRuns.delete(runId);
 
     // Update agent run record

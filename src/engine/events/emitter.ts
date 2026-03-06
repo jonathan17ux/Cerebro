@@ -13,15 +13,18 @@ export class RunEventEmitter {
   private buffer: ExecutionEvent[] = [];
   private webContents: WebContents;
   private runId: string;
+  private onEmit?: (event: ExecutionEvent) => void;
 
-  constructor(webContents: WebContents, runId: string) {
+  constructor(webContents: WebContents, runId: string, onEmit?: (event: ExecutionEvent) => void) {
     this.webContents = webContents;
     this.runId = runId;
+    this.onEmit = onEmit;
   }
 
-  /** Emit an event: buffer it and forward to the renderer via IPC. */
+  /** Emit an event: buffer it, notify the engine, and forward to the renderer via IPC. */
   emit(event: ExecutionEvent): void {
     this.buffer.push(event);
+    this.onEmit?.(event);
 
     if (!this.webContents.isDestroyed()) {
       const channel = IPC_CHANNELS.engineEvent(this.runId);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ChevronRight,
   CheckCircle2,
@@ -186,82 +186,99 @@ export default function RunLogCard({ engineRunId, isPreview }: RunLogCardProps) 
     return () => { cancelled = true; };
   }, [engineRunId]);
 
-  // Live event subscription
-  useEffect(() => {
-    const unsub = window.cerebro.engine.onEvent(engineRunId, (event: ExecutionEvent) => {
-      switch (event.type) {
-        case 'run_started':
-          setTotalSteps(event.totalSteps);
-          break;
+  // Process a single execution event — shared by live listener and replay.
+  const processEvent = useCallback((event: ExecutionEvent) => {
+    switch (event.type) {
+      case 'run_started':
+        setTotalSteps(event.totalSteps);
+        break;
 
-        case 'step_queued':
-          setSteps((prev) => [
-            ...prev,
-            { id: event.stepId, name: event.stepName, status: 'queued' as const, logs: [] },
-          ]);
-          break;
+      case 'step_queued':
+        setSteps((prev) => {
+          if (prev.some((s) => s.id === event.stepId)) return prev;
+          return [...prev, { id: event.stepId, name: event.stepName, status: 'queued' as const, logs: [] }];
+        });
+        break;
 
-        case 'step_started':
-          setSteps((prev) =>
-            prev.map((s) =>
-              s.id === event.stepId ? { ...s, status: 'running' as const, actionType: event.actionType } : s,
-            ),
-          );
-          break;
+      case 'step_started':
+        setSteps((prev) =>
+          prev.map((s) =>
+            s.id === event.stepId ? { ...s, status: 'running' as const, actionType: event.actionType } : s,
+          ),
+        );
+        break;
 
-        case 'step_completed':
-          setSteps((prev) =>
-            prev.map((s) =>
-              s.id === event.stepId
-                ? { ...s, status: 'completed' as const, summary: event.summary, durationMs: event.durationMs }
-                : s,
-            ),
-          );
-          break;
+      case 'step_completed':
+        setSteps((prev) =>
+          prev.map((s) =>
+            s.id === event.stepId
+              ? { ...s, status: 'completed' as const, summary: event.summary, durationMs: event.durationMs }
+              : s,
+          ),
+        );
+        break;
 
-        case 'step_failed':
-          setSteps((prev) =>
-            prev.map((s) =>
-              s.id === event.stepId ? { ...s, status: 'failed' as const, error: event.error } : s,
-            ),
-          );
-          break;
+      case 'step_failed':
+        setSteps((prev) =>
+          prev.map((s) =>
+            s.id === event.stepId ? { ...s, status: 'failed' as const, error: event.error } : s,
+          ),
+        );
+        break;
 
-        case 'step_skipped':
-          setSteps((prev) =>
-            prev.map((s) =>
-              s.id === event.stepId ? { ...s, status: 'skipped' as const } : s,
-            ),
-          );
-          break;
+      case 'step_skipped':
+        setSteps((prev) =>
+          prev.map((s) =>
+            s.id === event.stepId ? { ...s, status: 'skipped' as const } : s,
+          ),
+        );
+        break;
 
-        case 'step_log': {
-          setSteps((prev) =>
-            prev.map((s) => {
-              if (s.id !== event.stepId) return s;
-              const updated = [...s.logs, event.message];
-              return { ...s, logs: updated.length > MAX_STEP_LOGS ? updated.slice(-MAX_STEP_LOGS) : updated };
-            }),
-          );
-          break;
-        }
-
-        case 'run_completed':
-          setRunStatus('completed');
-          break;
-
-        case 'run_failed':
-          setRunStatus('failed');
-          break;
-
-        case 'run_cancelled':
-          setRunStatus('cancelled');
-          break;
+      case 'step_log': {
+        setSteps((prev) =>
+          prev.map((s) => {
+            if (s.id !== event.stepId) return s;
+            const updated = [...s.logs, event.message];
+            return { ...s, logs: updated.length > MAX_STEP_LOGS ? updated.slice(-MAX_STEP_LOGS) : updated };
+          }),
+        );
+        break;
       }
+
+      case 'run_completed':
+        setRunStatus('completed');
+        break;
+
+      case 'run_failed':
+        setRunStatus('failed');
+        break;
+
+      case 'run_cancelled':
+        setRunStatus('cancelled');
+        break;
+    }
+  }, []);
+
+  // Live event subscription + replay of buffered events to close the race window
+  useEffect(() => {
+    // 1. Subscribe to future events immediately
+    const unsub = window.cerebro.engine.onEvent(engineRunId, processEvent);
+
+    // 2. Replay any events that were emitted before we subscribed.
+    //    The engine keeps an in-memory buffer for each run (active + 60s after completion).
+    //    step_queued handler deduplicates, and state setters are idempotent, so replaying
+    //    events we already received via the live listener is harmless.
+    window.cerebro.engine.getEvents(engineRunId).then((events) => {
+      for (const event of events) {
+        processEvent(event);
+      }
+    }).catch(() => {
+      // Buffer may not be available (e.g. engine not initialized) — that's fine,
+      // the historical load fallback or live events will populate the card.
     });
 
     return unsub;
-  }, [engineRunId]);
+  }, [engineRunId, processEvent]);
 
   const handleCancel = (e: React.MouseEvent) => {
     e.stopPropagation();

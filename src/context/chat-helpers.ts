@@ -1,4 +1,4 @@
-import type { Conversation, Message, RoutineProposal } from '../types/chat';
+import type { Conversation, Message, RoutineProposal, ExpertProposal } from '../types/chat';
 
 // ── Pure helpers ─────────────────────────────────────────────────
 
@@ -41,6 +41,19 @@ export interface ApiConversationList {
 
 // ── Mapping helpers ──────────────────────────────────────────────
 
+function expertProposalFromApi(raw: Record<string, unknown>): ExpertProposal {
+  return {
+    name: raw.name as string,
+    description: (raw.description as string) ?? '',
+    domain: (raw.domain as string) ?? '',
+    systemPrompt: (raw.system_prompt as string) ?? '',
+    toolAccess: (raw.tool_access as string[]) ?? [],
+    suggestedContextFile: raw.suggested_context_file as string | undefined,
+    status: (raw.status as ExpertProposal['status']) ?? 'proposed',
+    savedExpertId: raw.saved_expert_id as string | undefined,
+  };
+}
+
 function proposalFromApi(raw: Record<string, unknown>): RoutineProposal {
   return {
     name: raw.name as string,
@@ -79,6 +92,11 @@ export function fromApiMessage(m: ApiMessage): Message {
         m.metadata.routine_proposal as Record<string, unknown>,
       );
     }
+    if (m.metadata.expert_proposal) {
+      msg.expertProposal = expertProposalFromApi(
+        m.metadata.expert_proposal as Record<string, unknown>,
+      );
+    }
     if (m.metadata.is_preview_run) {
       msg.isPreviewRun = true;
     }
@@ -98,6 +116,19 @@ export function fromApiConversation(c: ApiConversation): Conversation {
 }
 
 // ── API write helpers ────────────────────────────────────────────
+
+export function toApiExpertProposal(p: ExpertProposal): Record<string, unknown> {
+  return {
+    name: p.name,
+    description: p.description,
+    domain: p.domain,
+    system_prompt: p.systemPrompt,
+    tool_access: p.toolAccess,
+    suggested_context_file: p.suggestedContextFile,
+    status: p.status,
+    saved_expert_id: p.savedExpertId,
+  };
+}
 
 export function toApiProposal(p: RoutineProposal): Record<string, unknown> {
   return {

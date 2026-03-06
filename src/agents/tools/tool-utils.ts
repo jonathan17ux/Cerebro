@@ -29,6 +29,15 @@ export function backendRequest<T>(port: number, method: string, path: string, bo
           data += chunk.toString();
         });
         res.on('end', () => {
+          if (res.statusCode && res.statusCode >= 400) {
+            let detail = `HTTP ${res.statusCode}`;
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.detail) detail = parsed.detail;
+            } catch { /* use status code */ }
+            reject(new Error(detail));
+            return;
+          }
           try {
             resolve(JSON.parse(data) as T);
           } catch {

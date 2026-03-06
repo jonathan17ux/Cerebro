@@ -28,6 +28,8 @@ Core Intelligence is the orchestration layer. It makes three things possible tha
 
 ## Architecture Overview
 
+Cerebro is a desktop application that runs on the user's machine. It supports both **local models** (downloaded GGUF files running via llama.cpp) and **cloud models** (Anthropic, OpenAI, Google) when the user has configured API keys. The orchestration layer is model-agnostic — all routing, delegation, and tool execution works identically regardless of which model backend is active. An enhanced agent loop adapts behavior per model tier (small/medium/large) with tier-specific turn limits, context budgets, and guidance.
+
 ```
 User Message
        |

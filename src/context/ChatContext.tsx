@@ -20,6 +20,7 @@ import {
   titleFromContent,
   fromApiConversation,
   toApiProposal,
+  toApiExpertProposal,
   type ApiConversationList,
 } from './chat-helpers';
 
@@ -329,7 +330,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           const recentMessages = allMessages
             .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content && !m.isThinking)
             .slice(-MAX_RECENT)
-            .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+            .map((m) => {
+              let enrichedContent = m.content;
+              // Enrich assistant messages with successful tool call outputs
+              if (m.role === 'assistant' && m.toolCalls?.length) {
+                for (const tc of m.toolCalls) {
+                  if (tc.status === 'success' && tc.output) {
+                    const truncatedOutput = tc.output.length > 200
+                      ? tc.output.slice(0, 200) + '...'
+                      : tc.output;
+                    enrichedContent += `\n[Used ${tc.name}: ${truncatedOutput}]`;
+                  }
+                }
+              }
+              return { role: m.role as 'user' | 'assistant', content: enrichedContent };
+            });
 
           // Routine proposal snapshots — so the LLM knows what it proposed and what happened.
           const routineProposals = allMessages
@@ -339,12 +354,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               status: m.routineProposal!.status,
             }));
 
+          // Expert proposal snapshots — so the LLM knows what it proposed and what happened.
+          const expertProposals = allMessages
+            .filter((m) => m.expertProposal)
+            .map((m) => ({
+              name: m.expertProposal!.name,
+              status: m.expertProposal!.status,
+            }));
+
           const runId = await window.cerebro.agent.run({
             conversationId: convId!,
             content,
             expertId,
             recentMessages: recentMessages.length > 0 ? recentMessages : undefined,
             routineProposals: routineProposals.length > 0 ? routineProposals : undefined,
+            expertProposals: expertProposals.length > 0 ? expertProposals : undefined,
           });
 
           // Keep isThinking true and message.isThinking true until first content arrives
@@ -355,6 +379,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           const toolCalls: ToolCall[] = [];
           let accEngineRunId: string | undefined;
           let accRoutineProposal: import('../types/chat').RoutineProposal | undefined;
+          let accExpertProposal: import('../types/chat').ExpertProposal | undefined;
 
           const clearThinking = () => {
             if (!thinkingCleared) {
@@ -423,8 +448,44 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                     }
                   } catch { /* not valid JSON, treat as normal result */ }
                 }
+                // Detect propose_expert tool result and attach proposal to message
+                if (event.toolName === 'propose_expert' && !event.isError) {
+                  try {
+                    const parsed = JSON.parse(event.result);
+                    if (parsed.type === 'expert_proposal') {
+                      accExpertProposal = {
+                        name: parsed.name,
+                        description: parsed.description ?? '',
+                        domain: parsed.domain ?? '',
+                        systemPrompt: parsed.systemPrompt ?? '',
+                        toolAccess: parsed.toolAccess ?? [],
+                        suggestedContextFile: parsed.suggestedContextFile,
+                        status: 'proposed',
+                      };
+                      updateMessage(convId!, assistantId, {
+                        expertProposal: accExpertProposal,
+                      });
+                    }
+                  } catch { /* not valid JSON, treat as normal result */ }
+                }
                 break;
               }
+
+              case 'delegation_start': {
+                // Enrich the active delegate_to_expert tool call with the expert name
+                const delegationTc = toolCalls.find(
+                  (t) => t.name === 'delegate_to_expert' && t.status === 'running',
+                );
+                if (delegationTc) {
+                  delegationTc.delegationExpertName = event.expertName;
+                  updateMessage(convId!, assistantId, { toolCalls: [...toolCalls] });
+                }
+                break;
+              }
+
+              case 'delegation_end':
+                // No-op: tool_end already handles status finalization
+                break;
 
               case 'done': {
                 unsub();
@@ -440,6 +501,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 const doneMetadata: Record<string, unknown> = {};
                 if (accEngineRunId) doneMetadata.engine_run_id = accEngineRunId;
                 if (accRoutineProposal) doneMetadata.routine_proposal = toApiProposal(accRoutineProposal);
+                if (accExpertProposal) doneMetadata.expert_proposal = toApiExpertProposal(accExpertProposal);
                 // Persist final message
                 apiCreateMessage(convId!, {
                   id: assistantId,

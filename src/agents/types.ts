@@ -47,6 +47,8 @@ export interface ToolContext {
   };
   /** The parent run ID when this tool is executing inside a delegated run. */
   parentRunId?: string;
+  /** Current delegation depth (0 = top-level). Used to cap recursive delegation. */
+  delegationDepth?: number;
 }
 
 // ── Agent run request (from renderer) ───────────────────────────
@@ -75,6 +77,8 @@ export interface AgentRunRequest {
   expertId?: string | null;
   /** Parent run ID when this is a delegated sub-run. */
   parentRunId?: string;
+  /** Current delegation depth (0 = top-level). */
+  delegationDepth?: number;
   /** Recent messages from this conversation so the LLM has multi-turn context. */
   recentMessages?: MessageSnapshot[];
   /** Routine proposals from earlier messages in this conversation, so the LLM

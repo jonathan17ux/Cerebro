@@ -51,6 +51,9 @@ export interface CreateExpertInput {
   description: string;
   domain?: string;
   type?: ExpertType;
+  systemPrompt?: string;
+  toolAccess?: string[];
+  source?: ExpertSource;
   teamMembers?: Array<{ expertId: string; role: string; order: number }>;
 }
 
@@ -121,6 +124,9 @@ function toApiBody(input: CreateExpertInput): Record<string, unknown> {
   };
   if (input.domain) body.domain = input.domain;
   if (input.type) body.type = input.type;
+  if (input.systemPrompt) body.system_prompt = input.systemPrompt;
+  if (input.toolAccess && input.toolAccess.length > 0) body.tool_access = input.toolAccess;
+  if (input.source) body.source = input.source;
   if (input.teamMembers && input.teamMembers.length > 0) {
     body.team_members = input.teamMembers.map((m) => ({
       expert_id: m.expertId,

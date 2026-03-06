@@ -86,6 +86,7 @@ class MemoryContextRequest(BaseModel):
     scope_id: str | None = None
     include_expert_catalog: bool = False
     include_routine_catalog: bool = False
+    model_tier: str | None = None
 
 
 class MemoryContextResponse(BaseModel):

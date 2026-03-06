@@ -31,10 +31,15 @@ interface ActiveEngineRun {
   routineId?: string;
 }
 
+/** How long to keep event buffers after a run finishes (ms). */
+const EVENT_BUFFER_TTL_MS = 60_000;
+
 export class ExecutionEngine {
   private backendPort: number;
   private agentRuntime: AgentRuntime;
   private activeRuns = new Map<string, ActiveEngineRun>();
+  /** Buffers of emitted events, kept briefly after run completion for late subscribers. */
+  private eventBuffers = new Map<string, ExecutionEvent[]>();
 
   constructor(backendPort: number, agentRuntime: AgentRuntime) {
     this.backendPort = backendPort;
@@ -57,7 +62,11 @@ export class ExecutionEngine {
 
     // Create per-run resources
     const scratchpad = new RunScratchpad();
-    const emitter = new RunEventEmitter(webContents, runId);
+    const eventBuffer: ExecutionEvent[] = [];
+    this.eventBuffers.set(runId, eventBuffer);
+    const emitter = new RunEventEmitter(webContents, runId, (event) => {
+      eventBuffer.push(event);
+    });
 
     // Track this run
     const activeRun: ActiveEngineRun = {
@@ -198,6 +207,9 @@ export class ExecutionEngine {
 
         scratchpad.clear();
         this.activeRuns.delete(runId);
+
+        // Keep event buffer briefly for late subscribers, then clean up
+        setTimeout(() => this.eventBuffers.delete(runId), EVENT_BUFFER_TTL_MS);
       });
 
     return runId;
@@ -219,6 +231,11 @@ export class ExecutionEngine {
       routineId: run.routineId,
       startedAt: run.startedAt,
     }));
+  }
+
+  /** Get buffered events for a run (active or recently completed). */
+  getBufferedEvents(runId: string): ExecutionEvent[] {
+    return this.eventBuffers.get(runId) ?? [];
   }
 
   /** Create an ActionRegistry populated with all built-in actions. */

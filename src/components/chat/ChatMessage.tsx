@@ -5,6 +5,7 @@ import ThinkingIndicator from './ThinkingIndicator';
 import ToolCallCard from './ToolCallCard';
 import RunLogCard from './RunLogCard';
 import RoutineProposalCard from './RoutineProposalCard';
+import ExpertProposalCard from './ExpertProposalCard';
 
 interface ChatMessageProps {
   message: Message;
@@ -51,6 +52,17 @@ export default function ChatMessage({ message }: ChatMessageProps) {
         <div className="mb-2">
           <RoutineProposalCard
             proposal={message.routineProposal}
+            messageId={message.id}
+            conversationId={message.conversationId}
+          />
+        </div>
+      )}
+
+      {/* Expert proposal card */}
+      {!isUser && message.expertProposal && (
+        <div className="mb-2">
+          <ExpertProposalCard
+            proposal={message.expertProposal}
             messageId={message.id}
             conversationId={message.conversationId}
           />

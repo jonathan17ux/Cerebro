@@ -56,10 +56,10 @@
 | Preview execution with streaming logs | Done |
 | Cron scheduler for scheduled routines | Done |
 | **7. Cerebro Core Intelligence** | |
-| Cerebro system prompt architecture (role definition, tool registry, context/memory injection) | Not Started |
-| Cerebro routing logic (delegate to appropriate expert) | Not Started |
-| Agent conversation loop (message → LLM → tool calls → response agentic cycle) | Not Started |
-| Expert/team proposal and vibe engineering (propose → preview → add expert) | Not Started |
+| Cerebro system prompt architecture (role definition, tool registry, context/memory injection) | Done |
+| Cerebro routing logic (delegate to appropriate expert) | Done |
+| Agent conversation loop (message → LLM → tool calls → response agentic cycle) | Done |
+| Expert/team proposal and vibe engineering (propose → preview → add expert) | Done |
 | Team orchestration tech design and implementation (coordinator agent, delegation, fan-out) | Not Started |
 | Run initiation and orchestration (start runs, stream events to UI, produce Run Records) | Not Started |
 | **8. Activity + Approvals** | |

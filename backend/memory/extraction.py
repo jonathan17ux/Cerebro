@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime, timezone
 
@@ -12,6 +13,8 @@ from database import SessionLocal
 from models import KnowledgeEntry, MemoryItem, _uuid_hex
 
 from .embeddings import get_embedder
+
+log = logging.getLogger(__name__)
 
 # ── Secret detection patterns ────────────────────────────────────
 
@@ -86,6 +89,7 @@ async def _complete(messages: list[dict]) -> str | None:
                 "google": "gemini-2.0-flash",
             }
             model = model_map[provider]
+            log.info("Extraction: trying %s (%s)", provider, model)
             collected = ""
             async for event in adapter(
                 model=model,
@@ -100,14 +104,18 @@ async def _complete(messages: list[dict]) -> str | None:
                 if event.done:
                     break
             if collected:
+                log.info("Extraction: got %d chars from %s", len(collected), provider)
                 return collected
-        except Exception:
+            log.warning("Extraction: %s returned empty response", provider)
+        except Exception as exc:
+            log.warning("Extraction: %s failed: %s", provider, exc)
             continue
 
     # Try local inference
     try:
         from local_models.router import inference_engine
         if inference_engine and inference_engine.state == "ready":
+            log.info("Extraction: trying local model")
             result = inference_engine.llm.create_chat_completion(
                 messages=messages,
                 temperature=0.0,
@@ -115,10 +123,16 @@ async def _complete(messages: list[dict]) -> str | None:
             )
             content = result["choices"][0]["message"]["content"]
             if content:
+                log.info("Extraction: got %d chars from local model", len(content))
                 return content
-    except Exception:
-        pass
+            log.warning("Extraction: local model returned empty response")
+        else:
+            state = inference_engine.state if inference_engine else "no engine"
+            log.info("Extraction: local model not available (state=%s)", state)
+    except Exception as exc:
+        log.warning("Extraction: local model failed: %s", exc)
 
+    log.warning("Extraction: no model available — skipping")
     return None
 
 
@@ -150,11 +164,15 @@ async def run_extraction(
 ) -> None:
     """Extract learned facts and knowledge entries from conversation messages.
 
-    This runs as a background task — failures are silently ignored.
+    This runs as a background task — failures are logged but never crash the app.
     """
     try:
         if not messages or len(messages) < 2:
+            log.info("Extraction: skipped — fewer than 2 messages")
             return
+
+        log.info("Extraction: starting (scope=%s, scope_id=%s, conv=%s)",
+                 scope, scope_id, conversation_id)
 
         # Build extraction prompt with the last user+assistant pair
         extraction_messages = [
@@ -174,20 +192,27 @@ async def run_extraction(
         try:
             data = json.loads(json_str)
         except json.JSONDecodeError:
+            log.warning("Extraction: failed to parse LLM response as JSON: %.200s", json_str)
             return
 
         facts = data.get("facts", [])
         entries = data.get("entries", [])
 
         if not facts and not entries:
+            log.info("Extraction: LLM found nothing to extract")
             return
+
+        log.info("Extraction: LLM found %d facts, %d entries", len(facts), len(entries))
 
         embedder = get_embedder()
 
         # Open a fresh DB session for the background task
         if SessionLocal is None:
+            log.warning("Extraction: database not initialized — skipping save")
             return
         db = SessionLocal()
+        saved_facts = 0
+        saved_entries = 0
         try:
             # Process facts
             if facts:
@@ -203,11 +228,13 @@ async def run_extraction(
                     if not isinstance(fact_text, str) or not fact_text.strip():
                         continue
                     if contains_secret(fact_text):
+                        log.info("Extraction: skipped fact containing secret pattern")
                         continue
 
                     vec = embedder.embed(fact_text)
 
                     if _is_duplicate(vec, existing):
+                        log.info("Extraction: skipped duplicate fact: %.80s", fact_text)
                         continue
 
                     item = MemoryItem(
@@ -220,6 +247,7 @@ async def run_extraction(
                     )
                     db.add(item)
                     existing.append(item)
+                    saved_facts += 1
 
             # Process entries
             for entry_data in entries:
@@ -229,8 +257,10 @@ async def run_extraction(
                 if not summary:
                     continue
                 if contains_secret(summary):
+                    log.info("Extraction: skipped entry containing secret pattern")
                     continue
                 if contains_secret(json.dumps(entry_data.get("data", {}))):
+                    log.info("Extraction: skipped entry data containing secret pattern")
                     continue
 
                 occurred_at_str = entry_data.get("occurred_at")
@@ -259,16 +289,19 @@ async def run_extraction(
                     source_conversation_id=conversation_id,
                 )
                 db.add(entry)
+                saved_entries += 1
 
             db.commit()
-        except Exception:
+            log.info("Extraction: saved %d facts, %d entries", saved_facts, saved_entries)
+        except Exception as exc:
             db.rollback()
+            log.warning("Extraction: database error — rolled back: %s", exc)
         finally:
             db.close()
 
-    except Exception:
+    except Exception as exc:
         # Extraction is non-critical — never crash the app
-        pass
+        log.warning("Extraction: unexpected error: %s", exc)
 
 
 def _format_conversation(messages: list[dict]) -> str:

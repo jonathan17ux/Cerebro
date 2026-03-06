@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronRight, Search, Brain, Zap, Globe, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { ChevronRight, Search, Brain, Zap, Globe, CheckCircle2, XCircle, Loader2, Users } from 'lucide-react';
 import clsx from 'clsx';
 import type { ToolCall } from '../../types/chat';
 
@@ -7,6 +7,7 @@ const TOOL_ICONS: Record<string, typeof Search> = {
   search_knowledge: Search,
   analyze_intent: Brain,
   web_search: Globe,
+  delegate_to_expert: Users,
 };
 
 function StatusDot({ status }: { status: ToolCall['status'] }) {
@@ -37,6 +38,25 @@ interface ToolCallCardProps {
 export default function ToolCallCard({ toolCall }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(false);
   const Icon = TOOL_ICONS[toolCall.name] || Zap;
+  const isDelegation = toolCall.name === 'delegate_to_expert';
+  const expertName = toolCall.delegationExpertName;
+
+  // Delegation-specific header text
+  const headerText = isDelegation && expertName
+    ? toolCall.status === 'running'
+      ? `${expertName} is working...`
+      : `${expertName} responded`
+    : toolCall.description;
+
+  // For delegation, strip the "[Response from {name}]" prefix from output
+  const displayOutput = isDelegation && toolCall.output && expertName
+    ? toolCall.output.replace(new RegExp(`^\\[Response from ${expertName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]\\s*`), '')
+    : toolCall.output;
+
+  // For delegation, show the task from arguments instead of raw args
+  const delegationTask = isDelegation && toolCall.arguments?.task
+    ? String(toolCall.arguments.task)
+    : null;
 
   return (
     <div
@@ -57,7 +77,7 @@ export default function ToolCallCard({ toolCall }: ToolCallCardProps) {
           <Icon size={14} className="text-text-secondary" />
           <StatusDot status={toolCall.status} />
         </div>
-        <span className="flex-1 text-xs text-text-secondary truncate">{toolCall.description}</span>
+        <span className="flex-1 text-xs text-text-secondary truncate">{headerText}</span>
         <StatusIcon status={toolCall.status} />
         <ChevronRight
           size={12}
@@ -71,8 +91,20 @@ export default function ToolCallCard({ toolCall }: ToolCallCardProps) {
       {/* Expanded content */}
       {expanded && (
         <div className="border-t border-border-subtle px-3 py-2.5 space-y-2.5">
-          {/* Arguments */}
-          {toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
+          {/* Delegation: Task section */}
+          {delegationTask && (
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1">
+                Task
+              </div>
+              <div className="bg-bg-base rounded-md px-2.5 py-2 text-xs text-text-secondary">
+                {delegationTask}
+              </div>
+            </div>
+          )}
+
+          {/* Arguments (hidden for delegation — shown as Task above) */}
+          {!isDelegation && toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1">
                 Arguments
@@ -89,14 +121,14 @@ export default function ToolCallCard({ toolCall }: ToolCallCardProps) {
             </div>
           )}
 
-          {/* Output */}
-          {toolCall.output && (
+          {/* Output / Response */}
+          {displayOutput && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1">
-                Output
+                {isDelegation ? 'Response' : 'Output'}
               </div>
               <div className="bg-bg-base rounded-md px-2.5 py-2 font-mono text-xs text-text-secondary whitespace-pre-wrap">
-                {toolCall.output}
+                {displayOutput}
               </div>
             </div>
           )}
@@ -105,7 +137,7 @@ export default function ToolCallCard({ toolCall }: ToolCallCardProps) {
           {toolCall.status === 'running' && !toolCall.output && (
             <div className="flex items-center gap-2 text-xs text-text-tertiary py-1">
               <Loader2 size={12} className="animate-spin" />
-              Running...
+              {isDelegation && expertName ? `Waiting for ${expertName}...` : 'Running...'}
             </div>
           )}
         </div>

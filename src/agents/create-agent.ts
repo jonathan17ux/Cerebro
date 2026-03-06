@@ -14,6 +14,10 @@ interface CreateAgentConfig {
   tools: AgentTool[];
   backendPort: number;
   maxTurns?: number;
+  /** Optional context window transform applied before each LLM call. */
+  transformContext?: (messages: unknown[], signal?: AbortSignal) => Promise<unknown[]>;
+  /** Tool names for fuzzy matching in stream-fn (helps small models). */
+  toolNames?: string[];
 }
 
 /**
@@ -43,9 +47,9 @@ function toModel(resolved: ResolvedModel): Model<any> {
 
 export function createExpertAgent(config: CreateAgentConfig): Agent {
   const model = toModel(config.resolvedModel);
-  const streamFn = createBackendStreamFn(config.resolvedModel, config.backendPort);
+  const streamFn = createBackendStreamFn(config.resolvedModel, config.backendPort, config.toolNames);
 
-  const agent = new Agent({
+  const opts: Record<string, unknown> = {
     initialState: {
       systemPrompt: config.systemPrompt,
       model,
@@ -53,8 +57,13 @@ export function createExpertAgent(config: CreateAgentConfig): Agent {
       thinkingLevel: 'off',
     },
     streamFn: streamFn as any,
-    convertToLlm: (messages) => messages as Message[],
-  });
+    convertToLlm: (messages: unknown[]) => messages as Message[],
+  };
 
+  if (config.transformContext) {
+    opts.transformContext = config.transformContext;
+  }
+
+  const agent = new Agent(opts as any);
   return agent;
 }

@@ -108,6 +108,9 @@ const api: CerebroAPI = {
     activeRuns(): Promise<EngineActiveRunInfo[]> {
       return ipcRenderer.invoke(IPC_CHANNELS.ENGINE_ACTIVE_RUNS);
     },
+    getEvents(runId: string): Promise<ExecutionEvent[]> {
+      return ipcRenderer.invoke(IPC_CHANNELS.ENGINE_GET_EVENTS, runId);
+    },
     onEvent(runId: string, callback: (event: ExecutionEvent) => void): () => void {
       const channel = IPC_CHANNELS.engineEvent(runId);
       const listener = (_event: Electron.IpcRendererEvent, data: ExecutionEvent) => {

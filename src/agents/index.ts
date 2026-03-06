@@ -8,6 +8,8 @@ export { createExpertAgent } from './create-agent';
 export { createBackendStreamFn } from './stream-fn';
 export { createToolsForExpert } from './tools';
 export { translateEvent } from './events';
+export { createAgentLogger } from './logger';
+export type { AgentLogger } from './logger';
 export type {
   ResolvedModel,
   ExpertModelConfig,

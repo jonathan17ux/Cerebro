@@ -13,6 +13,7 @@ import {
 import { createGetCurrentTime, createGetUserProfile } from './system-tools';
 import { createWebSearch } from './search-tools';
 import { createRunRoutine, createProposeRoutine } from './routine-tools';
+import { createProposeExpert } from './expert-proposal-tools';
 import { createDelegateToExpert, createListExperts } from './delegation-tools';
 
 /** All available tool factories, keyed by name. */
@@ -26,6 +27,7 @@ const TOOL_FACTORIES: Record<string, (ctx: ToolContext) => AgentTool> = {
   web_search: createWebSearch,
   run_routine: createRunRoutine,
   propose_routine: createProposeRoutine,
+  propose_expert: createProposeExpert,
   delegate_to_expert: createDelegateToExpert,
   list_experts: createListExperts,
 };
@@ -48,6 +50,7 @@ const CEREBRO_TOOLS = [
   'delegate_to_expert',
   'list_experts',
   'propose_routine',
+  'propose_expert',
   'run_routine',
 ];
 

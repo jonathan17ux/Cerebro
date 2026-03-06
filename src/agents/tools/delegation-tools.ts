@@ -22,6 +22,8 @@ interface ExpertListResponse {
   total: number;
 }
 
+const MAX_DELEGATION_DEPTH = 3;
+
 export function createDelegateToExpert(ctx: ToolContext): AgentTool {
   return {
     name: 'delegate_to_expert',
@@ -51,6 +53,14 @@ export function createDelegateToExpert(ctx: ToolContext): AgentTool {
       // Validate we have the runtime and webContents
       if (!ctx.agentRuntime || !ctx.webContents) {
         return textResult('Delegation is not available in this context.');
+      }
+
+      // Depth limit: prevent infinite recursive delegation
+      const currentDepth = ctx.delegationDepth ?? 0;
+      if (currentDepth >= MAX_DELEGATION_DEPTH) {
+        return textResult(
+          `Delegation depth limit (${MAX_DELEGATION_DEPTH}) reached. Handle this task directly instead of delegating.`,
+        );
       }
 
       // Fetch expert to validate it exists and is enabled
@@ -100,8 +110,18 @@ export function createDelegateToExpert(ctx: ToolContext): AgentTool {
           content: prompt,
           expertId: expert.id,
           parentRunId,
+          delegationDepth: currentDepth + 1,
         });
       } catch (err) {
+        // Emit delegation_end to match the delegation_start above
+        if (!ctx.webContents.isDestroyed()) {
+          ctx.webContents.send(channel, {
+            type: 'delegation_end',
+            parentRunId,
+            childRunId: '',
+            status: 'error',
+          } as RendererAgentEvent);
+        }
         return textResult(
           `Failed to start expert "${expert.name}": ${err instanceof Error ? err.message : String(err)}`,
         );

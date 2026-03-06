@@ -31,6 +31,7 @@ export const IPC_CHANNELS = {
   ENGINE_RUN: 'engine:run',
   ENGINE_CANCEL: 'engine:cancel',
   ENGINE_ACTIVE_RUNS: 'engine:active-runs',
+  ENGINE_GET_EVENTS: 'engine:get-events',
   engineEvent: (runId: string) => `engine:event:${runId}`,
 
   // Scheduler
@@ -135,6 +136,7 @@ export interface AgentRunRequest {
   expertId?: string | null;
   recentMessages?: MessageSnapshot[];
   routineProposals?: ProposalSnapshot[];
+  expertProposals?: ProposalSnapshot[];
 }
 
 export type RendererAgentEvent =
@@ -143,6 +145,8 @@ export type RendererAgentEvent =
   | { type: 'text_delta'; delta: string }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_end'; toolCallId: string; toolName: string; result: string; isError: boolean }
+  | { type: 'delegation_start'; parentRunId: string; childRunId: string; expertId: string; expertName: string }
+  | { type: 'delegation_end'; parentRunId: string; childRunId: string; status: string }
   | { type: 'done'; runId: string; messageContent: string }
   | { type: 'error'; runId: string; error: string };
 
@@ -195,6 +199,7 @@ export interface EngineAPI {
   run(request: EngineRunRequest): Promise<string>;
   cancel(runId: string): Promise<boolean>;
   activeRuns(): Promise<EngineActiveRunInfo[]>;
+  getEvents(runId: string): Promise<ExecutionEvent[]>;
   onEvent(runId: string, callback: (event: ExecutionEvent) => void): () => void;
 }
 

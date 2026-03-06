@@ -11,6 +11,39 @@ import type { ResolvedModel } from './types';
 import { createAssistantMessageEventStream } from '@mariozechner/pi-ai';
 import type { AssistantMessageEventStream } from '@mariozechner/pi-ai';
 
+// ── Retry helpers ───────────────────────────────────────────────
+
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
+
+function isTransientError(err: Error & { code?: string; statusCode?: number }): boolean {
+  const code = err.code || '';
+  if (code === 'ECONNRESET' || code === 'ETIMEDOUT' || code === 'ECONNREFUSED') return true;
+  const status = err.statusCode || 0;
+  if (status === 429 || status === 500 || status === 502 || status === 503) return true;
+  const msg = err.message || '';
+  if (/\b(429|500|502|503)\b/.test(msg)) return true;
+  if (/ECONNRESET|ETIMEDOUT/.test(msg)) return true;
+  return false;
+}
+
+function retryDelay(attempt: number): number {
+  const base = BASE_DELAY_MS * Math.pow(2, attempt); // 1s, 2s, 4s
+  const jitter = Math.random() * base * 0.5; // up to 50% jitter
+  return base + jitter;
+}
+
+function sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(signal.reason); return; }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    }, { once: true });
+  });
+}
+
 interface StreamFnContext {
   systemPrompt?: string;
   messages: Array<{
@@ -32,10 +65,91 @@ interface BackendChatStreamEvent {
   tool_calls?: Array<{ id: string; name: string; arguments: string }> | null;
 }
 
+// ── JSON repair & fuzzy matching utilities ──────────────────────
+
+/**
+ * Attempt to repair malformed JSON from small models.
+ * Fixes: unquoted keys, trailing commas, unclosed brackets, and (as a last
+ * resort) single-quoted strings — but only when doing so produces valid JSON.
+ */
+export function repairJson(input: string): string {
+  let s = input.trim();
+
+  // Fix unquoted keys: {key: "value"} → {"key": "value"}
+  s = s.replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":');
+
+  // Remove trailing commas before } or ]
+  s = s.replace(/,\s*([}\]])/g, '$1');
+
+  // Try to close unclosed brackets/braces
+  let braces = 0;
+  let brackets = 0;
+  for (const ch of s) {
+    if (ch === '{') braces++;
+    else if (ch === '}') braces--;
+    else if (ch === '[') brackets++;
+    else if (ch === ']') brackets--;
+  }
+  while (brackets > 0) { s += ']'; brackets--; }
+  while (braces > 0) { s += '}'; braces--; }
+
+  // Try parsing as-is first
+  try {
+    JSON.parse(s);
+    return s;
+  } catch {
+    // continue to single-quote repair
+  }
+
+  // Targeted single-quote replacement: only replace quotes at JSON structural
+  // boundaries (keys and values delimited by single quotes adjacent to : , { } [ ])
+  const quoted = s.replace(/(?<=[:,\[{(\s])'([^']*?)'(?=\s*[:,\]})])/g, '"$1"');
+  try {
+    JSON.parse(quoted);
+    return quoted;
+  } catch {
+    // continue
+  }
+
+  // Brute-force: replace all single quotes, but only return the result if it
+  // actually parses — otherwise return the structural-fix-only version to
+  // avoid corrupting apostrophes in values (e.g. O'Brien)
+  const brute = s.replace(/'/g, '"');
+  try {
+    JSON.parse(brute);
+    return brute;
+  } catch {
+    return s;
+  }
+}
+
+/**
+ * Fuzzy-match a tool name against available tool names.
+ * Returns the best match if similarity is high enough, otherwise the original.
+ */
+export function fuzzyMatchToolName(name: string, toolNames: string[]): string {
+  if (!toolNames.length) return name;
+
+  const normalized = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // Exact match first
+  for (const tn of toolNames) {
+    if (tn.toLowerCase().replace(/[^a-z0-9]/g, '') === normalized) return tn;
+  }
+
+  // Prefix match
+  for (const tn of toolNames) {
+    const tnNorm = tn.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (tnNorm.startsWith(normalized) || normalized.startsWith(tnNorm)) return tn;
+  }
+
+  return name;
+}
+
 /**
  * Creates a streamFn bound to a specific resolved model and backend port.
  */
-export function createBackendStreamFn(resolvedModel: ResolvedModel, backendPort: number) {
+export function createBackendStreamFn(resolvedModel: ResolvedModel, backendPort: number, toolNames?: string[]) {
   // Return a function matching pi-agent-core's StreamFn type
   // StreamFn = (...args: Parameters<typeof streamSimple>) => AssistantMessageEventStream
   return function backendStreamFn(
@@ -69,11 +183,40 @@ export function createBackendStreamFn(resolvedModel: ResolvedModel, backendPort:
       body.tools = backendTools;
     }
 
-    // Start async streaming
-    streamFromBackend(backendPort, path, body, stream, options?.signal);
+    // Start async streaming with retry on transient errors
+    streamWithRetry(backendPort, path, body, stream, options?.signal, toolNames);
 
     return stream;
   };
+}
+
+/**
+ * Retry wrapper around streamFromBackend. Retries up to MAX_RETRIES times
+ * on transient errors (429, 5xx, ECONNRESET, ETIMEDOUT). Non-transient
+ * errors (400, 401, 403) fail immediately.
+ */
+function streamWithRetry(
+  port: number,
+  path: string,
+  body: Record<string, unknown>,
+  stream: AssistantMessageEventStream,
+  signal?: AbortSignal,
+  toolNames?: string[],
+  attempt = 0,
+): void {
+  streamFromBackend(port, path, body, stream, signal, toolNames, (err) => {
+    const transient = isTransientError(err as Error & { code?: string; statusCode?: number });
+    if (!transient || attempt >= MAX_RETRIES) {
+      // Not retryable or exhausted retries — emit error
+      emitError(stream, err.message);
+      return;
+    }
+    const delay = retryDelay(attempt);
+    console.log(`[Agent] Retrying stream (attempt ${attempt + 1}/${MAX_RETRIES}) after ${Math.round(delay)}ms: ${err.message}`);
+    sleepWithSignal(delay, signal)
+      .then(() => streamWithRetry(port, path, body, stream, signal, toolNames, attempt + 1))
+      .catch(() => emitError(stream, 'Request aborted'));
+  });
 }
 
 function convertMessages(context: StreamFnContext): Array<Record<string, unknown>> {
@@ -150,6 +293,8 @@ function streamFromBackend(
   body: Record<string, unknown>,
   stream: AssistantMessageEventStream,
   signal?: AbortSignal,
+  toolNames?: string[],
+  onError?: (err: Error & { statusCode?: number }) => void,
 ): void {
   const bodyStr = JSON.stringify(body);
 
@@ -163,6 +308,11 @@ function streamFromBackend(
       'Content-Type': 'application/json',
       'Content-Length': Buffer.byteLength(bodyStr).toString(),
     },
+  };
+
+  const handleError = (err: Error & { statusCode?: number }) => {
+    if (onError) onError(err);
+    else emitError(stream, err.message);
   };
 
   const req = http.request(options, (res) => {
@@ -179,7 +329,8 @@ function streamFromBackend(
         } catch {
           // use default
         }
-        emitError(stream, errorMsg);
+        const err = Object.assign(new Error(errorMsg), { statusCode: res.statusCode! });
+        handleError(err);
       });
       return;
     }
@@ -194,6 +345,7 @@ function streamFromBackend(
     let toolCallJsonBuffer = '';
     let thinkBuffer = '';
     let pendingChars = '';
+    let streamDone = false;
 
     function emitTextDelta(text: string) {
       if (!text) return;
@@ -211,9 +363,14 @@ function streamFromBackend(
       try {
         parsed = JSON.parse(jsonStr);
       } catch {
-        // Invalid JSON — emit as regular text
-        emitTextDelta(jsonStr);
-        return;
+        // Attempt JSON repair before giving up
+        try {
+          parsed = JSON.parse(repairJson(jsonStr));
+        } catch {
+          // Invalid JSON — emit as regular text
+          emitTextDelta(jsonStr);
+          return;
+        }
       }
 
       // Close open text block before emitting tool call
@@ -225,10 +382,12 @@ function streamFromBackend(
 
       const id = `tc_${Date.now()}_${toolCallIndex}`;
       const args = parsed.arguments ?? {};
+      const rawName = parsed.name ?? 'unknown';
+      const matchedName = toolNames?.length ? fuzzyMatchToolName(rawName, toolNames) : rawName;
       const toolCall = {
         type: 'toolCall' as const,
         id,
-        name: parsed.name ?? 'unknown',
+        name: matchedName,
         arguments: args,
       };
       partialContent.push(toolCall);
@@ -402,6 +561,7 @@ function streamFromBackend(
 
         // Handle done
         if (event.done) {
+          streamDone = true;
           flushPending();
           // Close text block if still open
           if (accumulatedText !== '') {
@@ -429,7 +589,8 @@ function streamFromBackend(
     });
 
     res.on('end', () => {
-      // If stream ended without a done event, emit done
+      // Only emit done if the SSE data handler didn't already
+      if (streamDone) return;
       flushPending();
       if (accumulatedText !== '') {
         stream.push({ type: 'text_end', contentIndex, content: accumulatedText, partial: partial as any });
@@ -443,7 +604,7 @@ function streamFromBackend(
   });
 
   req.on('error', (err) => {
-    emitError(stream, err.message);
+    handleError(err as Error & { statusCode?: number });
   });
 
   // Handle abort
