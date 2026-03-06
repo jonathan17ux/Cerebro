@@ -14,6 +14,7 @@ import { createExpertAgent } from './create-agent';
 import { translateEvent } from './events';
 import { createEnhancedAgentConfig, createTurnGovernor, classifyModelTier } from './loop';
 import { createAgentLogger } from './logger';
+import { OrchestrationTracker } from './orchestration-tracker';
 
 const MAX_CONCURRENT_RUNS = 5;
 
@@ -27,6 +28,7 @@ interface ActiveRun {
   governorUnsub: (() => void) | null;
   startedAt: number;
   accumulatedText: string;
+  tracker: OrchestrationTracker;
 }
 
 interface ExpertData {
@@ -208,6 +210,15 @@ export class AgentRuntime {
         `If a proposal was dismissed, do NOT re-propose it. If saved, the user already has it.`;
     }
 
+    // Create orchestration tracker (lazy — no RunRecord until first orchestration action)
+    const tracker = new OrchestrationTracker({
+      runId,
+      conversationId,
+      expertId: expertId || null,
+      parentRunId: request.parentRunId || null,
+      backendPort: this.backendPort,
+    });
+
     // Build tools
     const toolCtx = {
       expertId: expertId || null,
@@ -220,6 +231,7 @@ export class AgentRuntime {
       agentRuntime: this as AgentRuntime,
       parentRunId: runId,
       delegationDepth: request.delegationDepth ?? 0,
+      orchestrationTracker: tracker,
     };
     const toolAccess = expertData?.tool_access ? JSON.parse(expertData.tool_access) : null;
     const rawTools = createToolsForExpert(toolCtx, toolAccess);
@@ -267,6 +279,7 @@ export class AgentRuntime {
       governorUnsub: null,
       startedAt: Date.now(),
       accumulatedText: '',
+      tracker,
     };
 
     const unsubscribe = agent.subscribe((event: AgentEvent) => {
@@ -284,8 +297,12 @@ export class AgentRuntime {
         log.debug('Tool call', { tool: event.toolName });
       }
 
-      const translated = translateEvent(event, runId, turnCount);
+      let translated = translateEvent(event, runId, turnCount);
       if (translated) {
+        // Inject orchestrationRunId into done events
+        if (translated.type === 'done' && activeRun.tracker.isActive) {
+          translated = { ...translated, orchestrationRunId: runId };
+        }
         if (!webContents.isDestroyed()) {
           webContents.send(channel, translated);
         }
@@ -357,12 +374,19 @@ export class AgentRuntime {
       completion.reject(new Error('Run was cancelled'));
     }
 
-    // Cascade cancellation to child delegation runs
-    const prefix = `delegate:${runId}:`;
+    // Cascade cancellation to child delegation and team member runs.
+    // Collect IDs first to avoid mutating the Map during iteration.
+    const delegatePrefix = `delegate:${runId}:`;
+    const teamPrefix = `team:${runId}:`;
+    const childRunIds: string[] = [];
     for (const [childRunId, childRun] of this.activeRuns) {
-      if (childRun.conversationId.startsWith(prefix)) {
-        this.cancelRun(childRunId);
+      if (childRun.conversationId.startsWith(delegatePrefix) ||
+          childRun.conversationId.startsWith(teamPrefix)) {
+        childRunIds.push(childRunId);
       }
+    }
+    for (const childRunId of childRunIds) {
+      this.cancelRun(childRunId);
     }
     return true;
   }
@@ -405,6 +429,17 @@ export class AgentRuntime {
     run.unsubscribe();
     run.governorUnsub?.();
     this.activeRuns.delete(runId);
+
+    // Finalize orchestration tracker if it was activated
+    if (run.tracker.isActive) {
+      const trackerStatus: 'completed' | 'error' | 'cancelled' =
+        status === 'completed' ? 'completed'
+        : status === 'cancelled' ? 'cancelled'
+        : 'error';
+      run.tracker.finalize(trackerStatus).catch((err) =>
+        console.error('[OrchestrationTracker] Finalize failed:', err),
+      );
+    }
 
     // Update agent run record
     this.backendRequest('PATCH', `/agent-runs/${runId}`, {

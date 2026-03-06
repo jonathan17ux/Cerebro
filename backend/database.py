@@ -25,6 +25,7 @@ def _migrate(eng) -> None:
         ("agent_runs", "parent_run_id", "VARCHAR(32)"),
         ("experts", "strategy", "VARCHAR(20)"),
         ("experts", "coordinator_prompt", "TEXT"),
+        ("run_records", "parent_run_id", "VARCHAR(32)"),
     ]
     with eng.connect() as conn:
         for table, column, col_def in migrations:
@@ -34,6 +35,18 @@ def _migrate(eng) -> None:
                 log.info("Added column %s.%s", table, column)
             except Exception:
                 # Column already exists — ignore
+                conn.rollback()
+
+        # Ensure indexes exist for columns used in queries
+        index_migrations = [
+            ("ix_run_records_parent_run_id", "run_records", "parent_run_id"),
+            ("ix_agent_runs_parent_run_id", "agent_runs", "parent_run_id"),
+        ]
+        for idx_name, table, column in index_migrations:
+            try:
+                conn.execute(text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table} ({column})"))
+                conn.commit()
+            except Exception:
                 conn.rollback()
 
 

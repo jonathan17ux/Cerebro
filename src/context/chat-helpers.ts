@@ -106,6 +106,9 @@ export function fromApiMessage(m: ApiMessage): Message {
     if (m.metadata.engine_run_id) {
       msg.engineRunId = m.metadata.engine_run_id as string;
     }
+    if (m.metadata.orchestration_run_id) {
+      msg.orchestrationRunId = m.metadata.orchestration_run_id as string;
+    }
     if (m.metadata.routine_proposal) {
       msg.routineProposal = proposalFromApi(
         m.metadata.routine_proposal as Record<string, unknown>,

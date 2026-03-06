@@ -198,6 +198,7 @@ class RunRecord(Base):
     completed_steps: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     failed_step_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    parent_run_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     started_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)

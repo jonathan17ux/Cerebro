@@ -49,6 +49,14 @@ export interface ToolContext {
   parentRunId?: string;
   /** Current delegation depth (0 = top-level). Used to cap recursive delegation. */
   delegationDepth?: number;
+  /** OrchestrationTracker for recording delegations/teams/routines as RunRecords. */
+  orchestrationTracker?: {
+    recordDelegationStart(expertId: string, expertName: string, childRunId: string): Promise<void>;
+    recordDelegationEnd(childRunId: string, status: string, durationMs: number): void;
+    recordTeamStart(teamId: string, teamName: string, strategy: string, memberCount: number): Promise<void>;
+    recordTeamEnd(teamId: string, status: string, successCount: number, totalCount: number, durationMs?: number): void;
+    recordRoutineTriggered(routineId: string, engineRunId: string): Promise<void>;
+  };
 }
 
 // ── Agent run request (from renderer) ───────────────────────────
@@ -105,7 +113,7 @@ export type RendererAgentEvent =
   | { type: 'member_completed'; teamId: string; memberId: string; memberName: string; status: 'completed' | 'error'; response?: string }
   | { type: 'team_synthesis'; teamId: string }
   | { type: 'team_completed'; teamId: string; status: 'completed' | 'error'; successCount: number; totalCount: number }
-  | { type: 'done'; runId: string; messageContent: string }
+  | { type: 'done'; runId: string; messageContent: string; orchestrationRunId?: string }
   | { type: 'error'; runId: string; error: string };
 
 // ── Active run info ─────────────────────────────────────────────

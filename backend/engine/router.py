@@ -31,6 +31,7 @@ def _run_to_response(run: RunRecord, steps: list[StepRecordResponse] | None = No
         routine_id=run.routine_id,
         expert_id=run.expert_id,
         conversation_id=run.conversation_id,
+        parent_run_id=run.parent_run_id,
         status=run.status,
         run_type=run.run_type,
         trigger=run.trigger,
@@ -56,6 +57,7 @@ def create_run(body: RunRecordCreate, db=Depends(get_db)):
         routine_id=body.routine_id,
         expert_id=body.expert_id,
         conversation_id=body.conversation_id,
+        parent_run_id=body.parent_run_id,
         run_type=body.run_type,
         trigger=body.trigger,
         dag_json=body.dag_json,
@@ -74,6 +76,8 @@ def list_runs(
     status: str | None = None,
     run_type: str | None = None,
     trigger: str | None = None,
+    parent_run_id: str | None = None,
+    conversation_id: str | None = None,
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db=Depends(get_db),
@@ -87,6 +91,10 @@ def list_runs(
         q = q.filter(RunRecord.run_type == run_type)
     if trigger:
         q = q.filter(RunRecord.trigger == trigger)
+    if parent_run_id:
+        q = q.filter(RunRecord.parent_run_id == parent_run_id)
+    if conversation_id:
+        q = q.filter(RunRecord.conversation_id == conversation_id)
 
     total = q.count()
     runs = q.order_by(RunRecord.started_at.desc()).offset(offset).limit(limit).all()
@@ -109,6 +117,22 @@ def get_run(run_id: str, db=Depends(get_db)):
     )
     step_responses = [StepRecordResponse.model_validate(s) for s in steps]
     return _run_to_response(run, steps=step_responses)
+
+
+@router.get("/runs/{run_id}/children", response_model=RunRecordListResponse)
+def list_children(
+    run_id: str,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    db=Depends(get_db),
+):
+    q = db.query(RunRecord).filter(RunRecord.parent_run_id == run_id)
+    total = q.count()
+    children = q.order_by(RunRecord.started_at).offset(offset).limit(limit).all()
+    return RunRecordListResponse(
+        runs=[_run_to_response(r) for r in children],
+        total=total,
+    )
 
 
 @router.patch("/runs/{run_id}", response_model=RunRecordResponse)
@@ -154,6 +178,7 @@ def batch_create_steps(run_id: str, body: list[StepRecordCreate], db=Depends(get
             action_type=item.action_type,
             status=item.status,
             order_index=item.order_index,
+            input_json=item.input_json,
         )
         db.add(rec)
         records.append(rec)

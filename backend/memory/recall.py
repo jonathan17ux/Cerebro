@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlalchemy.orm import Session
 
 from models import Expert, KnowledgeEntry, MemoryItem, Routine, Setting
@@ -221,6 +223,34 @@ Example for a fitness coach:
 ```"""
 
 
+ORCHESTRATION_GUIDANCE = """## Orchestration Approach
+
+When handling requests that involve delegation or teams:
+
+1. **Brief plan first.** Before calling delegation tools, tell the user your approach in 1-2 sentences.
+   - "Let me have the Fitness Coach design your workout plan."
+   - "I'll get input from the Research Team and then synthesize their findings."
+   - "This needs two steps: I'll search for recent data, then have the Finance Advisor analyze it."
+
+2. **Delegate with rich context.** Experts can't see your conversation. Include:
+   - The user's specific request
+   - Relevant preferences or constraints from the conversation
+   - Any prior context that would help the expert
+
+3. **Synthesize with attribution.** After receiving expert responses:
+   - Present insights as a unified answer, not a raw dump
+   - Attribute key points when the source matters ("The Fitness Coach recommends...")
+   - Add your own perspective only when it genuinely adds value
+
+4. **Handle failures gracefully.** If a delegation fails:
+   - Tell the user what happened simply
+   - Offer an alternative (try again, different expert, answer directly)
+   - Never silently swallow errors
+
+5. **Don't over-orchestrate.** If you can answer directly in one response, do so.
+   Delegate only when the expert's specialized knowledge genuinely improves the answer."""
+
+
 TEAM_PROPOSAL_GUIDANCE = """## Team Proposals
 
 You can propose creating a new team of experts using the `propose_team` tool. \
@@ -366,8 +396,11 @@ async def recall_knowledge(
     return "\n".join(lines), len(all_entries_list)
 
 
-def _build_expert_catalog(db: Session) -> str:
-    """Build a formatted catalog of available experts for the system prompt."""
+def _build_expert_catalog(db: Session) -> tuple[str, list]:
+    """Build a formatted catalog of available experts for the system prompt.
+
+    Returns (section_text, experts_list) so callers can reuse the query result.
+    """
     import json
 
     from sqlalchemy import nullslast
@@ -383,7 +416,8 @@ def _build_expert_catalog(db: Session) -> str:
     if not experts:
         return (
             "## Available Experts\n"
-            "No experts configured yet. You can propose creating one with `propose_expert`."
+            "No experts configured yet. You can propose creating one with `propose_expert`.",
+            [],
         )
 
     lines = []
@@ -408,7 +442,63 @@ def _build_expert_catalog(db: Session) -> str:
             f"\n\n({total_enabled} experts total — showing top 20 by recent activity. "
             "Use `list_experts` to see all.)"
         )
-    return section
+    return section, experts
+
+
+_PUNCT_RE = re.compile(r'[^\w\s-]')
+
+_ROUTING_STOPWORDS = frozenset({
+    "the", "and", "for", "with", "that", "this", "from", "your", "who",
+    "can", "will", "are", "has", "have", "not", "but", "all", "any",
+    "each", "you", "our", "about", "into", "over", "such", "than",
+    "been", "does", "its", "was", "were", "they", "them", "their",
+})
+
+
+def _build_routing_table(experts: list) -> str | None:
+    """Build a compact keyword->expert routing table for small models.
+
+    Accepts a pre-fetched expert list to avoid a duplicate DB query.
+    """
+    if not experts:
+        return None
+
+    lines = []
+    for e in experts:
+        # Extract keywords from name, domain, and first sentence of description
+        keywords: list[str] = []
+        if e.domain:
+            keywords.append(e.domain.lower())
+        name_words = [
+            cleaned for w in e.name.split()
+            if (cleaned := _PUNCT_RE.sub('', w.lower()))
+            and cleaned not in _ROUTING_STOPWORDS and len(cleaned) > 1
+        ]
+        keywords.extend(name_words[:3])
+        # First sentence — split on ". " to avoid breaking on abbreviations
+        first_sentence = (e.description.split(". ")[0].lower() if e.description else "")
+        desc_words = [
+            cleaned for w in first_sentence.split()
+            if (cleaned := _PUNCT_RE.sub('', w))
+            and cleaned not in _ROUTING_STOPWORDS and len(cleaned) > 1
+        ][:3]
+        keywords.extend(desc_words)
+        # Deduplicate while preserving order
+        seen: set[str] = set()
+        unique_kw: list[str] = []
+        for kw in keywords:
+            if kw not in seen:
+                seen.add(kw)
+                unique_kw.append(kw)
+        if unique_kw:
+            label = f"{e.name} (team)" if e.type == "team" else e.name
+            lines.append(f"- {', '.join(unique_kw[:5])} → {label} [ID: {e.id}]")
+
+    if not lines:
+        return None
+
+    return "## Quick Routing Reference\n" + "\n".join(lines) + \
+           "\nUse this table to quickly match user requests to the right expert."
 
 
 def _build_routine_catalog(db: Session) -> str:
@@ -481,8 +571,17 @@ async def assemble_system_prompt(
     sections.append(f"## Current Date & Time\n{now.strftime('%A, %B %d, %Y at %I:%M %p UTC')}")
 
     # 2. Expert catalog (dynamic, only for Cerebro scope)
+    has_experts = False
     if include_expert_catalog and scope != "expert":
-        sections.append(_build_expert_catalog(db))
+        catalog_text, catalog_experts = _build_expert_catalog(db)
+        sections.append(catalog_text)
+        has_experts = len(catalog_experts) > 0
+
+        # For small models, add a compact keyword routing table
+        if model_tier == "small" and has_experts:
+            routing_table = _build_routing_table(catalog_experts)
+            if routing_table:
+                sections.append(routing_table)
 
     # 3. Routine catalog (dynamic, only for Cerebro scope)
     if include_routine_catalog and scope != "expert":
@@ -499,6 +598,11 @@ async def assemble_system_prompt(
     # 5b. Team proposal guidance (only for Cerebro, not individual experts)
     if scope != "expert":
         sections.append(TEAM_PROPOSAL_GUIDANCE)
+
+    # 5c. Orchestration guidance — skip for small models (they get tier-specific
+    # delegation rules in model-tiers.ts) and when no experts exist (dead weight)
+    if scope != "expert" and has_experts and model_tier != "small":
+        sections.append(ORCHESTRATION_GUIDANCE)
 
     # 6. Profile context file
     profile = db.get(Setting, "memory:context:profile")

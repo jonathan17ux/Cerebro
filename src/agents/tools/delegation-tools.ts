@@ -133,6 +133,7 @@ export function createDelegateToExpert(ctx: ToolContext): AgentTool {
 
       // Start the sub-agent run
       let childRunId: string;
+      const delegationStart = Date.now();
       try {
         childRunId = await ctx.agentRuntime.startRun(ctx.webContents, {
           conversationId: `delegate:${parentRunId}:${expert.id}`,
@@ -156,9 +157,13 @@ export function createDelegateToExpert(ctx: ToolContext): AgentTool {
         );
       }
 
+      // Record tracking (non-critical, fire-and-forget safe — internal try/catch)
+      await ctx.orchestrationTracker?.recordDelegationStart(expert.id, expert.name, childRunId);
+
       // Wait for completion
       try {
         const result = await ctx.agentRuntime.waitForCompletion(childRunId, 120_000);
+        ctx.orchestrationTracker?.recordDelegationEnd(childRunId, result.status, Date.now() - delegationStart);
 
         // Emit delegation_end
         if (!ctx.webContents.isDestroyed()) {
@@ -181,6 +186,8 @@ export function createDelegateToExpert(ctx: ToolContext): AgentTool {
           `[Response from ${expert.name}]\n\n${result.messageContent}`,
         );
       } catch (err) {
+        ctx.orchestrationTracker?.recordDelegationEnd(childRunId, 'error', Date.now() - delegationStart);
+
         // Emit delegation_end with error status
         if (!ctx.webContents.isDestroyed()) {
           ctx.webContents.send(channel, {
@@ -832,6 +839,7 @@ export function createDelegateToTeam(ctx: ToolContext): AgentTool {
         strategy,
         memberCount: members.length,
       });
+      await ctx.orchestrationTracker?.recordTeamStart(team.id, team.name, strategy, members.length);
 
       // Queue all members
       for (const member of members) {
@@ -845,6 +853,7 @@ export function createDelegateToTeam(ctx: ToolContext): AgentTool {
       }
 
       // Execute
+      const teamStart = Date.now();
       let results: MemberResult[];
       try {
         if (strategy === 'parallel') {
@@ -861,6 +870,7 @@ export function createDelegateToTeam(ctx: ToolContext): AgentTool {
           successCount: 0,
           totalCount: members.length,
         });
+        ctx.orchestrationTracker?.recordTeamEnd(team.id, 'error', 0, members.length, Date.now() - teamStart);
         return textResult(
           `Team "${team.name}" aborted: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -877,6 +887,7 @@ export function createDelegateToTeam(ctx: ToolContext): AgentTool {
           successCount: 0,
           totalCount: results.length,
         });
+        ctx.orchestrationTracker?.recordTeamEnd(team.id, 'error', 0, results.length, Date.now() - teamStart);
 
         const errors = results
           .filter((r) => r.status === 'error')
@@ -902,6 +913,7 @@ export function createDelegateToTeam(ctx: ToolContext): AgentTool {
         successCount,
         totalCount: results.length,
       });
+      ctx.orchestrationTracker?.recordTeamEnd(team.id, 'completed', successCount, results.length, Date.now() - teamStart);
 
       return textResult(`[Team Response from ${team.name}]\n\n${synthesized}`);
     },

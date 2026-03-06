@@ -153,7 +153,7 @@ export type RendererAgentEvent =
   | { type: 'member_completed'; teamId: string; memberId: string; memberName: string; status: 'completed' | 'error'; response?: string }
   | { type: 'team_synthesis'; teamId: string }
   | { type: 'team_completed'; teamId: string; status: 'completed' | 'error'; successCount: number; totalCount: number }
-  | { type: 'done'; runId: string; messageContent: string }
+  | { type: 'done'; runId: string; messageContent: string; orchestrationRunId?: string }
   | { type: 'error'; runId: string; error: string };
 
 export interface ActiveRunInfo {

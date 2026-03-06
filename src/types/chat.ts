@@ -106,6 +106,7 @@ export interface Message {
   expertProposal?: ExpertProposal;
   teamProposal?: TeamProposal;
   teamRun?: TeamRun;
+  orchestrationRunId?: string;
 }
 
 export interface Conversation {

@@ -87,7 +87,10 @@ You are running on a small model. Follow these rules carefully:
 2. Use ONE tool at a time — never call multiple tools in parallel.
 3. After each tool result, evaluate whether you have enough information to answer.
 4. If a tool call fails, try a different approach rather than retrying the same call.
-5. Keep your responses concise and focused.`;
+5. Keep your responses concise and focused.
+6. When delegating, say who you're delegating to in one sentence, then call the tool.
+7. Limit yourself to 1-2 delegations per response. Keep it focused.
+8. After receiving an expert's response, present it directly — don't try to rewrite it extensively.`;
   }
 
   if (tier === 'medium') {

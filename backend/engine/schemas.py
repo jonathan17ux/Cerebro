@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
+
+RunType = Literal["routine", "preview", "ad_hoc", "orchestration"]
+RunTrigger = Literal["manual", "scheduled", "webhook", "chat"]
 
 
 # ── Run Record ────────────────────────────────────────────────────
@@ -15,8 +19,9 @@ class RunRecordCreate(BaseModel):
     routine_id: str | None = None
     expert_id: str | None = None
     conversation_id: str | None = None
-    run_type: str = "routine"
-    trigger: str = "manual"
+    parent_run_id: str | None = None
+    run_type: RunType = "routine"
+    trigger: RunTrigger = "manual"
     dag_json: str | None = None
     total_steps: int = 0
 
@@ -24,6 +29,8 @@ class RunRecordCreate(BaseModel):
 class RunRecordUpdate(BaseModel):
     status: str | None = None
     completed_steps: int | None = None
+    total_steps: int | None = None
+    parent_run_id: str | None = None
     error: str | None = None
     failed_step_id: str | None = None
     completed_at: datetime | None = None
@@ -35,6 +42,7 @@ class RunRecordResponse(BaseModel):
     routine_id: str | None
     expert_id: str | None
     conversation_id: str | None
+    parent_run_id: str | None
     status: str
     run_type: str
     trigger: str
@@ -66,6 +74,7 @@ class StepRecordCreate(BaseModel):
     action_type: str
     status: str = "pending"
     order_index: int = 0
+    input_json: str | None = None
 
 
 class StepRecordUpdate(BaseModel):

@@ -66,7 +66,7 @@ def test_list_runs_with_filters(client):
     rtn_1 = _create_routine(client, name="Filter Routine 1")
     rtn_2 = _create_routine(client, name="Filter Routine 2")
     _create_run(client, routine_id=rtn_1, trigger="manual")
-    _create_run(client, routine_id=rtn_2, trigger="schedule")
+    _create_run(client, routine_id=rtn_2, trigger="scheduled")
     _create_run(client, routine_id=rtn_1, trigger="chat")
 
     # Filter by routine_id
@@ -74,7 +74,7 @@ def test_list_runs_with_filters(client):
     assert r.json()["total"] == 2
 
     # Filter by trigger
-    r = client.get("/engine/runs", params={"trigger": "schedule"})
+    r = client.get("/engine/runs", params={"trigger": "scheduled"})
     assert r.json()["total"] == 1
     assert r.json()["runs"][0]["routine_id"] == rtn_2
 
@@ -84,6 +84,43 @@ def test_list_runs_with_filters(client):
 
     # Filter by status with no match
     r = client.get("/engine/runs", params={"status": "completed"})
+    assert r.json()["total"] == 0
+
+
+def test_list_runs_filter_by_parent(client):
+    parent = _create_run(client, run_type="orchestration")
+    child1 = _create_run(client)
+    child2 = _create_run(client)
+    _create_run(client)  # unrelated
+
+    # Link children to parent
+    client.patch(f"/engine/runs/{child1['id']}", json={"parent_run_id": parent["id"]})
+    client.patch(f"/engine/runs/{child2['id']}", json={"parent_run_id": parent["id"]})
+
+    # Filter by parent_run_id
+    r = client.get("/engine/runs", params={"parent_run_id": parent["id"]})
+    assert r.json()["total"] == 2
+
+
+def test_list_children(client):
+    parent = _create_run(client, run_type="orchestration")
+    child1 = _create_run(client, parent_run_id=parent["id"])
+    child2 = _create_run(client, parent_run_id=parent["id"])
+    _create_run(client)  # unrelated run
+
+    r = client.get(f"/engine/runs/{parent['id']}/children")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 2
+    child_ids = {c["id"] for c in body["runs"]}
+    assert child_ids == {child1["id"], child2["id"]}
+
+    # Empty children for run with none
+    r = client.get(f"/engine/runs/{child1['id']}/children")
+    assert r.json()["total"] == 0
+
+    # Nonexistent parent returns empty (not 404)
+    r = client.get(f"/engine/runs/{_hex_id()}/children")
     assert r.json()["total"] == 0
 
 
@@ -122,6 +159,37 @@ def test_update_run(client):
     assert body["status"] == "completed"
     assert body["completed_steps"] == 3
     assert body["duration_ms"] == 1234
+
+
+def test_update_run_parent_run_id(client):
+    parent = _create_run(client, run_type="orchestration")
+    child = _create_run(client)
+
+    r = client.patch(f"/engine/runs/{child['id']}", json={
+        "parent_run_id": parent["id"],
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["parent_run_id"] == parent["id"]
+
+    # Verify persistence via GET
+    r = client.get(f"/engine/runs/{child['id']}")
+    assert r.json()["parent_run_id"] == parent["id"]
+
+
+def test_update_run_total_steps(client):
+    run = _create_run(client)
+    assert run["total_steps"] == 0
+
+    r = client.patch(f"/engine/runs/{run['id']}", json={
+        "total_steps": 3,
+    })
+    assert r.status_code == 200
+    assert r.json()["total_steps"] == 3
+
+    # Verify persistence
+    r = client.get(f"/engine/runs/{run['id']}")
+    assert r.json()["total_steps"] == 3
 
 
 def test_delete_run_cascades(client):

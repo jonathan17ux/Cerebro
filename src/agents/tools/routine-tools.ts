@@ -83,6 +83,7 @@ export function createRunRoutine(ctx: ToolContext): AgentTool {
           routineId: match.id,
           triggerSource: 'chat',
         });
+        await ctx.orchestrationTracker?.recordRoutineTriggered(match.id, runId);
         return textResult(`Started routine "${match.name}".\n[ENGINE_RUN_ID:${runId}]`);
       } catch (err) {
         return textResult(

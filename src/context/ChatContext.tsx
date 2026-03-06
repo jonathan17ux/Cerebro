@@ -382,6 +382,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           let accRoutineProposal: import('../types/chat').RoutineProposal | undefined;
           let accExpertProposal: import('../types/chat').ExpertProposal | undefined;
           let accTeamProposal: import('../types/chat').TeamProposal | undefined;
+          let accOrchestrationRunId: string | undefined;
 
           const clearThinking = () => {
             if (!thinkingCleared) {
@@ -637,15 +638,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                 unsub();
                 clearThinking();
                 setIsStreaming(false);
+                // Capture orchestrationRunId
+                if (event.orchestrationRunId) {
+                  accOrchestrationRunId = event.orchestrationRunId;
+                }
                 updateMessage(convId!, assistantId, {
                   content: event.messageContent || accumulated,
                   isThinking: false,
                   isStreaming: false,
                   agentRunId: runId,
+                  orchestrationRunId: accOrchestrationRunId,
                 });
                 // Build metadata for persistence
                 const doneMetadata: Record<string, unknown> = {};
                 if (accEngineRunId) doneMetadata.engine_run_id = accEngineRunId;
+                if (accOrchestrationRunId) doneMetadata.orchestration_run_id = accOrchestrationRunId;
                 if (accRoutineProposal) doneMetadata.routine_proposal = toApiProposal(accRoutineProposal);
                 if (accExpertProposal) doneMetadata.expert_proposal = toApiExpertProposal(accExpertProposal);
                 if (accTeamProposal) doneMetadata.team_proposal = toApiTeamProposal(accTeamProposal);
