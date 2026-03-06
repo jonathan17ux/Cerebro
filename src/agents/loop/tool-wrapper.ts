@@ -12,7 +12,14 @@ const DEFAULT_TOOL_TIMEOUT_MS = 30_000;
 const DELEGATION_TOOL_TIMEOUT_MS = 180_000;
 const MAX_DEDUP_CACHE_SIZE = 100;
 
-const DELEGATION_TOOLS = new Set(['delegate_to_expert']);
+const DELEGATION_TOOLS = new Set(['delegate_to_expert', 'delegate_to_team']);
+
+/** Tools returning structured JSON parsed by the renderer — must not be truncated. */
+const STRUCTURED_RESULT_TOOLS = new Set([
+  'propose_team',
+  'propose_expert',
+  'propose_routine',
+]);
 
 interface CacheEntry {
   result: unknown;
@@ -99,6 +106,9 @@ function wrapExecute(
 
     // Cache the result
     dedupCache.set(hash, { result, timestamp: Date.now() });
+
+    // Skip compression for structured JSON results parsed by the renderer
+    if (STRUCTURED_RESULT_TOOLS.has(toolName)) return result;
 
     // Compress result if too large
     return compressResult(result, tierConfig.compressionThreshold);
