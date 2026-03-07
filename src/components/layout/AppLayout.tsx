@@ -6,6 +6,7 @@ import WelcomeView from '../chat/WelcomeView';
 import ExpertsScreen from '../screens/ExpertsScreen';
 import RoutinesScreen from '../screens/RoutinesScreen';
 import IntegrationsScreen from '../screens/IntegrationsScreen';
+import ActivityScreen from '../screens/ActivityScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
 import AlertModal from '../ui/AlertModal';
@@ -43,6 +44,9 @@ export default function AppLayout() {
     }
     if (activeScreen === 'integrations') {
       return <IntegrationsScreen />;
+    }
+    if (activeScreen === 'activity') {
+      return <ActivityScreen />;
     }
     if (activeScreen === 'settings') {
       return <SettingsScreen />;
