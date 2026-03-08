@@ -1,74 +1,435 @@
 /**
- * Action type metadata and default step parameters.
+ * Action type metadata, categories, and default step parameters.
+ *
+ * See docs/tech-designs/actions.md for the full taxonomy.
  */
 
 import {
+  Zap,
+  Brain,
+  BookOpen,
+  Plug2,
+  GitBranch,
+  ArrowUpRight,
   MessageSquare,
   Bot,
+  Tags,
+  FileOutput,
+  FileText,
+  Search,
+  Globe,
+  FileSearch,
+  Save,
+  Globe2,
+  Calendar,
+  Mail,
+  MessageCircle,
+  Activity,
+  Github,
+  StickyNote,
   Shuffle,
-  Plug,
-  Send,
+  Timer,
   ShieldCheck,
+  Merge,
+  Send,
+  Bell,
+  Reply,
   type LucideIcon,
 } from 'lucide-react';
 import type { RoutineStepData } from './dag-flow-mapping';
+
+// ── Action Categories ─────────────────────────────────────────
+
+export type ActionCategoryId =
+  | 'triggers'
+  | 'ai'
+  | 'knowledge'
+  | 'integrations'
+  | 'logic'
+  | 'output';
+
+export interface ActionCategory {
+  id: ActionCategoryId;
+  name: string;
+  icon: LucideIcon;
+  color: string;        // Tailwind color class prefix
+  colorHex: string;     // Hex for canvas rendering
+}
+
+export const ACTION_CATEGORIES: ActionCategory[] = [
+  { id: 'triggers',     name: 'Triggers',     icon: Zap,          color: 'teal',    colorHex: '#14b8a6' },
+  { id: 'ai',           name: 'AI',           icon: Brain,        color: 'violet',  colorHex: '#8b5cf6' },
+  { id: 'knowledge',    name: 'Knowledge',    icon: BookOpen,     color: 'indigo',  colorHex: '#6366f1' },
+  { id: 'integrations', name: 'Integrations', icon: Plug2,        color: 'blue',    colorHex: '#3b82f6' },
+  { id: 'logic',        name: 'Logic',        icon: GitBranch,    color: 'slate',   colorHex: '#64748b' },
+  { id: 'output',       name: 'Output',       icon: ArrowUpRight, color: 'emerald', colorHex: '#10b981' },
+];
+
+export const CATEGORY_MAP = Object.fromEntries(
+  ACTION_CATEGORIES.map((c) => [c.id, c]),
+) as Record<ActionCategoryId, ActionCategory>;
 
 // ── Action Metadata ───────────────────────────────────────────
 
 export interface ActionMeta {
   name: string;
   icon: LucideIcon;
-  color: string;        // Tailwind color class prefix (e.g. 'cyan', 'purple')
+  color: string;        // Tailwind color class prefix
   colorHex: string;     // Hex for canvas rendering
   description: string;
+  category: ActionCategoryId;
+  isAvailable: boolean; // false = shows "soon" badge, not draggable
+  keywords: string[];   // for sidebar search
 }
 
 export const ACTION_META: Record<string, ActionMeta> = {
-  model_call: {
-    name: 'Model Call',
+  // ── Triggers ──────────────────────────────────────────────
+  trigger_schedule: {
+    name: 'Schedule',
+    icon: Zap,
+    color: 'teal',
+    colorHex: '#14b8a6',
+    description: 'Run on a cron schedule',
+    category: 'triggers',
+    isAvailable: true,
+    keywords: ['cron', 'time', 'recurring', 'timer'],
+  },
+  trigger_manual: {
+    name: 'Manual',
+    icon: Zap,
+    color: 'teal',
+    colorHex: '#14b8a6',
+    description: 'Run with a button click',
+    category: 'triggers',
+    isAvailable: true,
+    keywords: ['button', 'click', 'run'],
+  },
+  trigger_webhook: {
+    name: 'Webhook',
+    icon: Zap,
+    color: 'teal',
+    colorHex: '#14b8a6',
+    description: 'Run when HTTP POST arrives',
+    category: 'triggers',
+    isAvailable: true,
+    keywords: ['http', 'post', 'api', 'endpoint'],
+  },
+  trigger_app_event: {
+    name: 'App Event',
+    icon: Zap,
+    color: 'teal',
+    colorHex: '#14b8a6',
+    description: 'Run on external app event',
+    category: 'triggers',
+    isAvailable: false,
+    keywords: ['event', 'app', 'external', 'trigger'],
+  },
+
+  // ── AI ────────────────────────────────────────────────────
+  ask_ai: {
+    name: 'Ask AI',
     icon: MessageSquare,
-    color: 'cyan',
-    colorHex: '#06b6d4',
-    description: 'Single LLM call',
+    color: 'violet',
+    colorHex: '#8b5cf6',
+    description: 'Single LLM prompt',
+    category: 'ai',
+    isAvailable: true,
+    keywords: ['llm', 'prompt', 'chat', 'model', 'gpt', 'claude'],
   },
-  expert_step: {
-    name: 'Expert Step',
+  run_expert: {
+    name: 'Run Expert',
     icon: Bot,
-    color: 'purple',
-    colorHex: '#a855f7',
-    description: 'Multi-turn agent',
+    color: 'violet',
+    colorHex: '#8b5cf6',
+    description: 'Delegate to a Cerebro Expert for multi-turn work',
+    category: 'ai',
+    isAvailable: true,
+    keywords: ['agent', 'expert', 'delegate', 'multi-turn'],
   },
-  transformer: {
-    name: 'Transformer',
-    icon: Shuffle,
-    color: 'amber',
-    colorHex: '#f59e0b',
-    description: 'Data transform',
+  classify: {
+    name: 'Classify',
+    icon: Tags,
+    color: 'violet',
+    colorHex: '#8b5cf6',
+    description: 'Categorize input with AI',
+    category: 'ai',
+    isAvailable: true,
+    keywords: ['categorize', 'label', 'sort', 'triage'],
   },
-  connector: {
-    name: 'Connector',
-    icon: Plug,
+  extract: {
+    name: 'Extract',
+    icon: FileOutput,
+    color: 'violet',
+    colorHex: '#8b5cf6',
+    description: 'Pull structured data from unstructured text',
+    category: 'ai',
+    isAvailable: true,
+    keywords: ['parse', 'structured', 'json', 'fields', 'schema'],
+  },
+  summarize: {
+    name: 'Summarize',
+    icon: FileText,
+    color: 'violet',
+    colorHex: '#8b5cf6',
+    description: 'Condense long text',
+    category: 'ai',
+    isAvailable: true,
+    keywords: ['summary', 'condense', 'brief', 'shorten'],
+  },
+
+  // ── Knowledge ─────────────────────────────────────────────
+  search_memory: {
+    name: 'Search Memory',
+    icon: Search,
+    color: 'indigo',
+    colorHex: '#6366f1',
+    description: 'Query learned facts',
+    category: 'knowledge',
+    isAvailable: true,
+    keywords: ['memory', 'recall', 'facts', 'knowledge'],
+  },
+  search_web: {
+    name: 'Search Web',
+    icon: Globe,
+    color: 'indigo',
+    colorHex: '#6366f1',
+    description: 'Tavily web search',
+    category: 'knowledge',
+    isAvailable: true,
+    keywords: ['web', 'search', 'tavily', 'internet', 'google'],
+  },
+  search_documents: {
+    name: 'Search Documents',
+    icon: FileSearch,
+    color: 'indigo',
+    colorHex: '#6366f1',
+    description: 'RAG over uploaded docs',
+    category: 'knowledge',
+    isAvailable: false,
+    keywords: ['rag', 'documents', 'files', 'vector', 'embeddings'],
+  },
+  save_to_memory: {
+    name: 'Save to Memory',
+    icon: Save,
+    color: 'indigo',
+    colorHex: '#6366f1',
+    description: 'Store facts for later',
+    category: 'knowledge',
+    isAvailable: true,
+    keywords: ['save', 'store', 'remember', 'persist'],
+  },
+
+  // ── Integrations ──────────────────────────────────────────
+  http_request: {
+    name: 'HTTP Request',
+    icon: Globe2,
     color: 'blue',
     colorHex: '#3b82f6',
-    description: 'External service',
+    description: 'Call any REST API',
+    category: 'integrations',
+    isAvailable: true,
+    keywords: ['api', 'rest', 'fetch', 'curl', 'request', 'http'],
   },
-  channel: {
-    name: 'Channel',
-    icon: Send,
-    color: 'green',
-    colorHex: '#22c55e',
-    description: 'Send message',
+  integration_google_calendar: {
+    name: 'Google Calendar',
+    icon: Calendar,
+    color: 'blue',
+    colorHex: '#3b82f6',
+    description: 'Get/create events',
+    category: 'integrations',
+    isAvailable: false,
+    keywords: ['calendar', 'google', 'events', 'schedule'],
+  },
+  integration_gmail: {
+    name: 'Gmail',
+    icon: Mail,
+    color: 'blue',
+    colorHex: '#3b82f6',
+    description: 'Read/send emails',
+    category: 'integrations',
+    isAvailable: false,
+    keywords: ['email', 'gmail', 'google', 'mail'],
+  },
+  integration_slack: {
+    name: 'Slack',
+    icon: MessageCircle,
+    color: 'blue',
+    colorHex: '#3b82f6',
+    description: 'Send/read messages',
+    category: 'integrations',
+    isAvailable: false,
+    keywords: ['slack', 'chat', 'channel', 'message'],
+  },
+  integration_whatsapp: {
+    name: 'WhatsApp',
+    icon: MessageCircle,
+    color: 'blue',
+    colorHex: '#3b82f6',
+    description: 'Send messages',
+    category: 'integrations',
+    isAvailable: false,
+    keywords: ['whatsapp', 'message', 'phone', 'text'],
+  },
+  integration_strava: {
+    name: 'Strava',
+    icon: Activity,
+    color: 'blue',
+    colorHex: '#3b82f6',
+    description: 'Get activities/stats',
+    category: 'integrations',
+    isAvailable: false,
+    keywords: ['strava', 'running', 'cycling', 'fitness', 'activity'],
+  },
+  integration_github: {
+    name: 'GitHub',
+    icon: Github,
+    color: 'blue',
+    colorHex: '#3b82f6',
+    description: 'Issues, PRs, repos',
+    category: 'integrations',
+    isAvailable: false,
+    keywords: ['github', 'git', 'issues', 'pull requests', 'repos'],
+  },
+  integration_notion: {
+    name: 'Notion',
+    icon: StickyNote,
+    color: 'blue',
+    colorHex: '#3b82f6',
+    description: 'Query/create pages',
+    category: 'integrations',
+    isAvailable: false,
+    keywords: ['notion', 'pages', 'database', 'wiki'],
+  },
+
+  // ── Logic ─────────────────────────────────────────────────
+  condition: {
+    name: 'Condition',
+    icon: GitBranch,
+    color: 'slate',
+    colorHex: '#64748b',
+    description: 'If/else branching',
+    category: 'logic',
+    isAvailable: true,
+    keywords: ['if', 'else', 'branch', 'condition', 'switch'],
+  },
+  loop: {
+    name: 'Loop',
+    icon: Shuffle,
+    color: 'slate',
+    colorHex: '#64748b',
+    description: 'Iterate over items',
+    category: 'logic',
+    isAvailable: true,
+    keywords: ['loop', 'iterate', 'foreach', 'repeat', 'list'],
+  },
+  delay: {
+    name: 'Delay',
+    icon: Timer,
+    color: 'slate',
+    colorHex: '#64748b',
+    description: 'Wait before continuing',
+    category: 'logic',
+    isAvailable: true,
+    keywords: ['wait', 'delay', 'pause', 'timer', 'sleep'],
   },
   approval_gate: {
     name: 'Approval Gate',
     icon: ShieldCheck,
-    color: 'amber',
-    colorHex: '#f59e0b',
-    description: 'Approval checkpoint',
+    color: 'slate',
+    colorHex: '#64748b',
+    description: 'Pause for human review',
+    category: 'logic',
+    isAvailable: true,
+    keywords: ['approval', 'review', 'gate', 'human', 'confirm'],
+  },
+  merge: {
+    name: 'Merge',
+    icon: Merge,
+    color: 'slate',
+    colorHex: '#64748b',
+    description: 'Combine parallel branches',
+    category: 'logic',
+    isAvailable: false,
+    keywords: ['merge', 'combine', 'join', 'parallel'],
+  },
+
+  // ── Output ────────────────────────────────────────────────
+  send_message: {
+    name: 'Send Message',
+    icon: Send,
+    color: 'emerald',
+    colorHex: '#10b981',
+    description: 'Post to Cerebro chat',
+    category: 'output',
+    isAvailable: true,
+    keywords: ['message', 'chat', 'send', 'post', 'notify'],
+  },
+  send_notification: {
+    name: 'Notification',
+    icon: Bell,
+    color: 'emerald',
+    colorHex: '#10b981',
+    description: 'Desktop notification',
+    category: 'output',
+    isAvailable: true,
+    keywords: ['notification', 'alert', 'desktop', 'push'],
+  },
+  send_email: {
+    name: 'Send Email',
+    icon: Mail,
+    color: 'emerald',
+    colorHex: '#10b981',
+    description: 'Email via provider',
+    category: 'output',
+    isAvailable: false,
+    keywords: ['email', 'send', 'mail', 'smtp'],
+  },
+  webhook_response: {
+    name: 'Webhook Response',
+    icon: Reply,
+    color: 'emerald',
+    colorHex: '#10b981',
+    description: 'Reply to webhook caller',
+    category: 'output',
+    isAvailable: false,
+    keywords: ['webhook', 'response', 'reply', 'http'],
   },
 };
 
 export const ACTION_TYPES = Object.keys(ACTION_META);
+
+// ── Old → New Action Type Migration ─────────────────────────
+
+/** Maps legacy action type names to their new equivalents. */
+export const ACTION_TYPE_MIGRATION: Record<string, string> = {
+  model_call: 'ask_ai',
+  expert_step: 'run_expert',
+  transformer: 'condition', // closest logic equivalent
+  connector: 'http_request',
+  channel: 'send_message',
+};
+
+/** Resolves an action type, applying migration if needed. */
+export function resolveActionType(actionType: string): string {
+  return ACTION_TYPE_MIGRATION[actionType] ?? actionType;
+}
+
+// ── Helpers ─────────────────────────────────────────────────
+
+/** Get actions grouped by category. */
+export function getActionsByCategory(): { category: ActionCategory; actions: [string, ActionMeta][] }[] {
+  return ACTION_CATEGORIES.map((category) => ({
+    category,
+    actions: Object.entries(ACTION_META).filter(
+      ([, meta]) => meta.category === category.id,
+    ),
+  }));
+}
+
+/** Check if an action type is a trigger. */
+export function isTriggerAction(actionType: string): boolean {
+  return ACTION_META[actionType]?.category === 'triggers';
+}
 
 // ── Default Step Data ─────────────────────────────────────────
 
@@ -81,18 +442,62 @@ export function getDefaultStepData(
   };
 
   switch (actionType) {
-    case 'model_call':
-      return { ...base, params: { prompt: '' } };
-    case 'expert_step':
-      return { ...base, params: { prompt: '' } };
-    case 'transformer':
-      return { ...base, params: { operation: 'format', template: '' } };
-    case 'connector':
-      return { ...base, params: { service: '', operation: '' } };
-    case 'channel':
-      return { ...base, params: { channel: '', operation: 'send', message: '' } };
+    // AI
+    case 'ask_ai':
+    case 'model_call': // legacy
+      return { ...base, params: { prompt: '', system_prompt: '', temperature: 0.7, max_tokens: 2048 } };
+    case 'run_expert':
+    case 'expert_step': // legacy
+      return { ...base, params: { expert_id: '', task: '', context: '', max_turns: 10 } };
+    case 'classify':
+      return { ...base, params: { prompt: '', categories: [], model: '' } };
+    case 'extract':
+      return { ...base, params: { prompt: '', schema: [], model: '' } };
+    case 'summarize':
+      return { ...base, params: { input_field: '', max_length: 'medium', focus: '', model: '' } };
+
+    // Knowledge
+    case 'search_memory':
+      return { ...base, params: { query: '', scope: 'global', max_results: 5 } };
+    case 'search_web':
+      return { ...base, params: { query: '', max_results: 5, include_ai_answer: false } };
+    case 'search_documents':
+      return { ...base, params: { query: '', collection: '', top_k: 5, similarity_threshold: 0.7 } };
+    case 'save_to_memory':
+      return { ...base, params: { content: '', scope: 'global', type: 'fact' } };
+
+    // Integrations
+    case 'http_request':
+    case 'connector': // legacy
+      return { ...base, params: { method: 'GET', url: '', headers: [], body: '', auth_type: 'none', timeout: 30 } };
+
+    // Logic
+    case 'condition':
+      return { ...base, params: { field: '', operator: 'equals', value: '' } };
+    case 'loop':
+      return { ...base, params: { items_field: '', variable_name: 'item' } };
+    case 'delay':
+      return { ...base, params: { duration: 1, unit: 'seconds' } };
     case 'approval_gate':
       return { requiresApproval: true, onError: 'fail' as const, params: { summary: '' } };
+    case 'merge':
+      return { ...base, params: { strategy: 'combine_all', match_field: '' } };
+
+    // Output
+    case 'send_message':
+    case 'channel': // legacy
+      return { ...base, params: { message: '', target: 'cerebro_chat' } };
+    case 'send_notification':
+      return { ...base, params: { title: '', body: '', urgency: 'normal' } };
+    case 'send_email':
+      return { ...base, params: { to: '', subject: '', body: '', provider: '' } };
+    case 'webhook_response':
+      return { ...base, params: { status_code: 200, body: '', headers: [] } };
+
+    // Legacy
+    case 'transformer':
+      return { ...base, params: { operation: 'format', template: '' } };
+
     default:
       return { ...base, params: {} };
   }

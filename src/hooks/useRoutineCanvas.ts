@@ -1,11 +1,12 @@
 /**
  * Canvas state management hook for the Routine Editor.
  *
- * Encapsulates ReactFlow nodes/edges state, serialization to/from DAGDefinition,
- * node CRUD, connection handling with cycle detection, and save/dirty tracking.
+ * Encapsulates ReactFlow nodes/edges state, serialization to/from CanvasDefinition,
+ * node CRUD, trigger/annotation management, connection handling with cycle detection,
+ * and save/dirty tracking.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import {
   useNodesState,
   useEdgesState,
@@ -16,10 +17,10 @@ import {
   type Connection,
 } from '@xyflow/react';
 import type { Routine } from '../types/routines';
-import type { DAGDefinition } from '../engine/dag/types';
-import type { RoutineStepData } from '../utils/dag-flow-mapping';
+import type { RoutineStepData, CanvasDefinition } from '../utils/dag-flow-mapping';
 import { dagToFlow, flowToDag, autoLayoutNodes } from '../utils/dag-flow-mapping';
-import { getDefaultStepData } from '../utils/step-defaults';
+import { getDefaultStepData, ACTION_META, resolveActionType } from '../utils/step-defaults';
+import { getEdgeColor } from '../utils/handle-types';
 import { useRoutines } from '../context/RoutineContext';
 
 // ── Cycle detection (BFS from target to see if it reaches source) ──
@@ -29,7 +30,6 @@ function wouldCreateCycle(
   source: string,
   target: string,
 ): boolean {
-  // Check if there's already a path from target to source (which would form a cycle)
   const adjacency = new Map<string, string[]>();
   for (const edge of edges) {
     const neighbors = adjacency.get(edge.source) ?? [];
@@ -51,6 +51,39 @@ function wouldCreateCycle(
   return false;
 }
 
+// ── Edge styling ──────────────────────────────────────────────
+
+function makeEdgeProps(sourceActionType: string) {
+  const color = getEdgeColor(sourceActionType);
+  return {
+    type: 'smoothstep' as const,
+    style: { stroke: color, strokeWidth: 1.5 },
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      color,
+    },
+  };
+}
+
+/** Look up the action type for a node by ID. */
+function getNodeActionType(nodes: Node[], nodeId: string): string {
+  const node = nodes.find((n) => n.id === nodeId);
+  if (!node) return 'signal';
+  if (node.type === 'triggerNode') return 'trigger';
+  const d = node.data as RoutineStepData;
+  return resolveActionType(d?.actionType ?? 'signal');
+}
+
+// ── Map routine trigger_type to canvas trigger action type ──
+
+function routineTriggerToActionType(triggerType: string): string {
+  switch (triggerType) {
+    case 'cron': return 'trigger_schedule';
+    case 'webhook': return 'trigger_webhook';
+    default: return 'trigger_manual';
+  }
+}
+
 // ── Hook ──────────────────────────────────────────────────────
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -59,6 +92,8 @@ export function useRoutineCanvas(routine: Routine) {
   const { updateRoutine } = useRoutines();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [triggerNode, setTriggerNode] = useState<Node | null>(null);
+  const [annotationNodes, setAnnotationNodes] = useState<Node[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
@@ -67,38 +102,73 @@ export function useRoutineCanvas(routine: Routine) {
   const isSavingRef = useRef(false);
   const savedResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initialize from routine.dagJson on first load or routine change
+  // Initialize from routine.dagJson on first load
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
 
+    let foundTrigger = false;
+
     if (routine.dagJson) {
       try {
-        const dag: DAGDefinition = JSON.parse(routine.dagJson);
-        const { nodes: flowNodes, edges: flowEdges } = dagToFlow(dag);
-        setNodes(flowNodes);
-        setEdges(flowEdges);
+        const dag: CanvasDefinition = JSON.parse(routine.dagJson);
+        const result = dagToFlow(dag);
+        setNodes(result.nodes);
+        setEdges(result.edges);
+        if (result.triggerNode) {
+          setTriggerNode(result.triggerNode);
+          foundTrigger = true;
+        }
+        if (result.annotationNodes.length > 0) setAnnotationNodes(result.annotationNodes);
       } catch {
-        // Invalid JSON — start with empty canvas
         setNodes([]);
         setEdges([]);
       }
     }
+
+    // Auto-create trigger node from routine's trigger_type if none in DAG
+    if (!foundTrigger) {
+      const tt = routineTriggerToActionType(routine.triggerType);
+      setTriggerNode({
+        id: '__trigger__',
+        type: 'triggerNode',
+        position: { x: 0, y: -120 },
+        data: {
+          triggerType: tt,
+          config: routine.cronExpression
+            ? { cron_expression: routine.cronExpression }
+            : {},
+        },
+        deletable: false,
+      });
+    }
   }, [routine.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Add node ──
+  // Combine all node types for ReactFlow rendering
+  const allNodes = useMemo(() => {
+    const result: Node[] = [];
+    if (triggerNode) result.push(triggerNode);
+    result.push(...nodes);
+    result.push(...annotationNodes);
+    return result;
+  }, [triggerNode, nodes, annotationNodes]);
+
+  // ── Add step node ──
 
   const addNode = useCallback(
     (actionType: string, position: { x: number; y: number }) => {
       const id = crypto.randomUUID();
       const defaults = getDefaultStepData(actionType);
+      const meta = ACTION_META[actionType];
+      const name = meta ? `New ${meta.name}` : `New ${actionType.replace(/_/g, ' ')}`;
+
       const newNode: Node = {
         id,
         type: 'routineStep',
         position,
         data: {
           stepId: id,
-          name: `New ${actionType.replace('_', ' ')}`,
+          name,
           actionType,
           params: defaults.params,
           dependsOn: [],
@@ -118,20 +188,53 @@ export function useRoutineCanvas(routine: Routine) {
 
   const deleteNode = useCallback(
     (nodeId: string) => {
-      setNodes((prev) => prev.filter((n) => n.id !== nodeId));
-      setEdges((prev) =>
-        prev.filter((e) => e.source !== nodeId && e.target !== nodeId),
-      );
+      // Don't allow deleting trigger node
+      if (nodeId === '__trigger__') return;
+
+      // Check if it's an annotation
+      const isAnnotation = annotationNodes.some((n) => n.id === nodeId);
+      if (isAnnotation) {
+        setAnnotationNodes((prev) => prev.filter((n) => n.id !== nodeId));
+      } else {
+        setNodes((prev) => prev.filter((n) => n.id !== nodeId));
+        setEdges((prev) =>
+          prev.filter((e) => e.source !== nodeId && e.target !== nodeId),
+        );
+      }
+
       if (selectedNodeId === nodeId) setSelectedNodeId(null);
       setIsDirty(true);
     },
-    [setNodes, setEdges, selectedNodeId],
+    [setNodes, setEdges, selectedNodeId, annotationNodes],
   );
 
   // ── Update node data ──
 
   const updateNodeData = useCallback(
-    (nodeId: string, partial: Partial<RoutineStepData>) => {
+    (nodeId: string, partial: Record<string, unknown>) => {
+      // Trigger node
+      if (nodeId === '__trigger__') {
+        setTriggerNode((prev) => {
+          if (!prev) return prev;
+          return { ...prev, data: { ...prev.data, ...partial } };
+        });
+        setIsDirty(true);
+        return;
+      }
+
+      // Annotation node
+      const isAnnotation = annotationNodes.some((n) => n.id === nodeId);
+      if (isAnnotation) {
+        setAnnotationNodes((prev) =>
+          prev.map((n) =>
+            n.id === nodeId ? { ...n, data: { ...n.data, ...partial } } : n,
+          ),
+        );
+        setIsDirty(true);
+        return;
+      }
+
+      // Step node
       setNodes((prev) =>
         prev.map((node) =>
           node.id === nodeId
@@ -141,7 +244,25 @@ export function useRoutineCanvas(routine: Routine) {
       );
       setIsDirty(true);
     },
-    [setNodes],
+    [setNodes, annotationNodes],
+  );
+
+  // ── Add sticky note ──
+
+  const addStickyNote = useCallback(
+    (position: { x: number; y: number }) => {
+      const id = `note-${crypto.randomUUID()}`;
+      const note: Node = {
+        id,
+        type: 'stickyNote',
+        position,
+        data: { text: '', width: 200, height: 120 },
+      };
+      setAnnotationNodes((prev) => [...prev, note]);
+      setIsDirty(true);
+      return id;
+    },
+    [],
   );
 
   // ── Connect edges with cycle detection ──
@@ -151,37 +272,32 @@ export function useRoutineCanvas(routine: Routine) {
       if (!connection.source || !connection.target) return;
       if (connection.source === connection.target) return;
 
-      // Check for duplicate edge
-      const exists = edges.some(
-        (e) => e.source === connection.source && e.target === connection.target,
-      );
-      if (exists) return;
+      // Get source action type for edge coloring (node data is stable during connection)
+      const sourceType = getNodeActionType(allNodes, connection.source);
+      const edgeProps = makeEdgeProps(sourceType);
 
-      // Cycle detection
-      if (wouldCreateCycle(edges, connection.source, connection.target)) return;
+      setEdges((prev) => {
+        // Check for duplicate edge using latest state
+        const exists = prev.some(
+          (e) => e.source === connection.source && e.target === connection.target,
+        );
+        if (exists) return prev;
 
-      setEdges((prev) =>
-        addEdge(
-          {
-            ...connection,
-            type: 'smoothstep',
-            markerEnd: { type: MarkerType.ArrowClosed, color: '#06b6d4' },
-            style: { stroke: '#06b6d4', strokeWidth: 1.5 },
-          },
-          prev,
-        ),
-      );
+        // Cycle detection using latest state
+        if (wouldCreateCycle(prev, connection.source!, connection.target!)) return prev;
+
+        return addEdge({ ...connection, ...edgeProps }, prev);
+      });
       setIsDirty(true);
     },
-    [edges, setEdges],
+    [setEdges, allNodes],
   );
 
   // ── Delete selected elements ──
 
   const deleteSelected = useCallback(() => {
-    // Collect selected node IDs first
     const selectedNodeIds = new Set(
-      nodes.filter((n) => n.selected).map((n) => n.id),
+      allNodes.filter((n) => n.selected && n.id !== '__trigger__').map((n) => n.id),
     );
 
     const hasSelectedNodes = selectedNodeIds.size > 0;
@@ -190,13 +306,15 @@ export function useRoutineCanvas(routine: Routine) {
     if (!hasSelectedNodes && !hasSelectedEdges) return;
 
     if (hasSelectedNodes) {
-      setNodes((prev) => prev.filter((n) => !n.selected));
+      // Remove step nodes
+      setNodes((prev) => prev.filter((n) => !selectedNodeIds.has(n.id)));
+      // Remove annotation nodes
+      setAnnotationNodes((prev) => prev.filter((n) => !selectedNodeIds.has(n.id)));
       if (selectedNodeId && selectedNodeIds.has(selectedNodeId)) {
         setSelectedNodeId(null);
       }
     }
 
-    // Remove edges connected to deleted nodes AND any selected edges
     setEdges((prev) =>
       prev.filter(
         (e) =>
@@ -207,17 +325,27 @@ export function useRoutineCanvas(routine: Routine) {
     );
 
     setIsDirty(true);
-  }, [nodes, edges, setNodes, setEdges, selectedNodeId]);
+  }, [allNodes, edges, setNodes, setEdges, selectedNodeId]);
 
   // ── Auto-layout ──
 
   const runAutoLayout = useCallback(() => {
-    setNodes((prev) => {
-      const laid = autoLayoutNodes(prev, edges);
-      return laid;
-    });
+    const stepAndTrigger = triggerNode ? [triggerNode, ...nodes] : [...nodes];
+    const laid = autoLayoutNodes(stepAndTrigger, edges);
+
+    const newTrigger = laid.find((n) => n.id === '__trigger__');
+    const newStepNodes = laid.filter((n) => n.id !== '__trigger__');
+
+    if (newTrigger) setTriggerNode(newTrigger);
+    setNodes(newStepNodes);
     setIsDirty(true);
-  }, [setNodes, edges]);
+  }, [triggerNode, nodes, edges, setNodes]);
+
+  // ── Serialize for save ──
+
+  const serialize = useCallback(() => {
+    return flowToDag(nodes, edges, triggerNode, annotationNodes);
+  }, [nodes, edges, triggerNode, annotationNodes]);
 
   // ── Autosave effect ──
 
@@ -230,7 +358,7 @@ export function useRoutineCanvas(routine: Routine) {
       isSavingRef.current = true;
       setSaveStatus('saving');
       try {
-        const dag = flowToDag(nodes, edges);
+        const dag = serialize();
         await updateRoutine(routine.id, { dag_json: JSON.stringify(dag) });
         setIsDirty(false);
         setSaveStatus('saved');
@@ -247,7 +375,22 @@ export function useRoutineCanvas(routine: Routine) {
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [nodes, edges, isDirty, routine.id, updateRoutine]);
+  }, [nodes, edges, triggerNode, annotationNodes, isDirty, routine.id, updateRoutine, serialize]);
+
+  // Listen for sticky note text updates from StickyNoteNode
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { id, text } = (e as CustomEvent).detail;
+      setAnnotationNodes((prev) =>
+        prev.map((n) =>
+          n.id === id ? { ...n, data: { ...n.data, text } } : n,
+        ),
+      );
+      setIsDirty(true);
+    };
+    window.addEventListener('stickyNoteUpdate', handler);
+    return () => window.removeEventListener('stickyNoteUpdate', handler);
+  }, []);
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -264,7 +407,7 @@ export function useRoutineCanvas(routine: Routine) {
     isSavingRef.current = true;
     setSaveStatus('saving');
     try {
-      const dag = flowToDag(nodes, edges);
+      const dag = serialize();
       const dagJson = JSON.stringify(dag);
       await updateRoutine(routine.id, { dag_json: dagJson });
       setIsDirty(false);
@@ -277,10 +420,10 @@ export function useRoutineCanvas(routine: Routine) {
     } finally {
       isSavingRef.current = false;
     }
-  }, [nodes, edges, routine.id, updateRoutine]);
+  }, [routine.id, updateRoutine, serialize]);
 
   return {
-    nodes,
+    nodes: allNodes,
     edges,
     onNodesChange,
     onEdgesChange,
@@ -288,12 +431,14 @@ export function useRoutineCanvas(routine: Routine) {
     selectedNodeId,
     setSelectedNodeId,
     addNode,
-    deleteNode,
     updateNodeData,
+    addStickyNote,
     deleteSelected,
     runAutoLayout,
     saveToBackend,
     isDirty,
     saveStatus,
+    triggerNode,
+    annotationNodes,
   };
 }

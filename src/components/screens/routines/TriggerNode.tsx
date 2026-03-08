@@ -1,0 +1,103 @@
+import { memo } from 'react';
+import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Zap } from 'lucide-react';
+import clsx from 'clsx';
+import { describeCron } from '../../../utils/cron-helpers';
+import { HANDLE_COLORS } from '../../../utils/handle-types';
+
+const TEAL = '#14b8a6';
+
+interface TriggerData {
+  triggerType: string;
+  config: Record<string, unknown>;
+}
+
+function TriggerNode({ data, selected }: NodeProps) {
+  const d = data as TriggerData;
+  const type = d.triggerType;
+
+  const label = (() => {
+    switch (type) {
+      case 'trigger_schedule': return 'Schedule Trigger';
+      case 'trigger_manual': return 'Manual Trigger';
+      case 'trigger_webhook': return 'Webhook Trigger';
+      case 'trigger_app_event': return 'App Event Trigger';
+      default: return 'Trigger';
+    }
+  })();
+
+  const detail = (() => {
+    switch (type) {
+      case 'trigger_schedule': {
+        const cron = d.config.cron_expression as string;
+        return cron ? describeCron(cron) : 'No schedule set';
+      }
+      case 'trigger_manual':
+        return 'Click "Run" to execute';
+      case 'trigger_webhook': {
+        const path = (d.config.path as string) || '/webhook/...';
+        return `POST ${path}`;
+      }
+      case 'trigger_app_event': {
+        const app = (d.config.app as string) || '';
+        const event = (d.config.event as string) || '';
+        return app ? `${app}: ${event}` : 'Not configured';
+      }
+      default:
+        return '';
+    }
+  })();
+
+  return (
+    <div
+      className={clsx(
+        'w-[260px] rounded-lg border bg-teal-500/5 transition-all duration-150',
+        selected
+          ? 'shadow-lg'
+          : 'border-border-subtle hover:border-border-default',
+      )}
+      style={{
+        borderLeftWidth: 4,
+        borderLeftColor: TEAL,
+        ...(selected
+          ? {
+              borderColor: TEAL,
+              boxShadow: `0 0 12px ${TEAL}40`,
+            }
+          : {}),
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
+        <div
+          className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: `${TEAL}20` }}
+        >
+          <Zap size={12} style={{ color: TEAL }} />
+        </div>
+        <span
+          className="text-[10px] font-medium uppercase tracking-wider"
+          style={{ color: TEAL }}
+        >
+          {label}
+        </span>
+      </div>
+
+      {/* Detail */}
+      <div className="px-3 pb-3">
+        <span className="text-sm text-text-secondary block truncate">
+          {detail}
+        </span>
+      </div>
+
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!border-bg-surface !w-2 !h-2"
+        style={{ backgroundColor: HANDLE_COLORS.signal }}
+      />
+    </div>
+  );
+}
+
+export default memo(TriggerNode);

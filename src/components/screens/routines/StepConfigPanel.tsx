@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Shield } from 'lucide-react';
 import type { Node } from '@xyflow/react';
 import type { RoutineStepData } from '../../../utils/dag-flow-mapping';
-import { ACTION_META } from '../../../utils/step-defaults';
+import { ACTION_META, resolveActionType } from '../../../utils/step-defaults';
 import Toggle from '../../ui/Toggle';
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -26,15 +26,17 @@ function FieldLabel({ text }: { text: string }) {
   );
 }
 
-// ── Param Forms ───────────────────────────────────────────────
+const inputCls =
+  'w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors';
+const textareaCls =
+  'w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors resize-none';
+const selectCls = inputCls;
 
-function ModelCallParams({
-  params,
-  onChange,
-}: {
-  params: Record<string, unknown>;
-  onChange: (p: Record<string, unknown>) => void;
-}) {
+type P = { params: Record<string, unknown>; onChange: (p: Record<string, unknown>) => void };
+
+// ── AI Param Forms ────────────────────────────────────────────
+
+function AskAiParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
@@ -43,53 +45,37 @@ function ModelCallParams({
           value={(params.prompt as string) ?? ''}
           onChange={(e) => onChange({ ...params, prompt: e.target.value })}
           rows={4}
-          placeholder="Enter prompt for the model..."
-          className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors resize-none"
+          placeholder="Enter prompt... Use {{step_name.field}} for variables"
+          className={textareaCls}
         />
       </div>
       <div>
-        <FieldLabel text="System Prompt" />
+        <FieldLabel text="System Prompt (optional)" />
         <textarea
-          value={(params.systemPrompt as string) ?? ''}
-          onChange={(e) => onChange({ ...params, systemPrompt: e.target.value })}
+          value={(params.system_prompt as string) ?? ''}
+          onChange={(e) => onChange({ ...params, system_prompt: e.target.value })}
           rows={3}
           placeholder="Optional system prompt..."
-          className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors resize-none"
+          className={textareaCls}
         />
       </div>
       <div className="flex gap-3">
         <div className="flex-1">
           <FieldLabel text="Temperature" />
           <input
-            type="number"
-            min={0}
-            max={2}
-            step={0.1}
-            value={(params.temperature as number) ?? ''}
-            onChange={(e) =>
-              onChange({
-                ...params,
-                temperature: e.target.value ? parseFloat(e.target.value) : undefined,
-              })
-            }
-            placeholder="0.7"
-            className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors"
+            type="number" min={0} max={2} step={0.1}
+            value={(params.temperature as number) ?? 0.7}
+            onChange={(e) => onChange({ ...params, temperature: parseFloat(e.target.value) || 0.7 })}
+            className={inputCls}
           />
         </div>
         <div className="flex-1">
           <FieldLabel text="Max Tokens" />
           <input
-            type="number"
-            min={1}
-            value={(params.maxTokens as number) ?? ''}
-            onChange={(e) =>
-              onChange({
-                ...params,
-                maxTokens: e.target.value ? parseInt(e.target.value) : undefined,
-              })
-            }
-            placeholder="2048"
-            className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors"
+            type="number" min={1}
+            value={(params.max_tokens as number) ?? 2048}
+            onChange={(e) => onChange({ ...params, max_tokens: parseInt(e.target.value) || 2048 })}
+            className={inputCls}
           />
         </div>
       </div>
@@ -97,154 +83,568 @@ function ModelCallParams({
   );
 }
 
-function ExpertStepParams({
-  params,
-  onChange,
-}: {
-  params: Record<string, unknown>;
-  onChange: (p: Record<string, unknown>) => void;
-}) {
+function RunExpertParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
         <FieldLabel text="Expert ID" />
         <input
-          value={(params.expertId as string) ?? ''}
-          onChange={(e) => onChange({ ...params, expertId: e.target.value })}
-          placeholder="Expert identifier..."
-          className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors"
+          value={(params.expert_id as string) ?? ''}
+          onChange={(e) => onChange({ ...params, expert_id: e.target.value })}
+          placeholder="Select an expert..."
+          className={inputCls}
         />
       </div>
       <div>
-        <FieldLabel text="Prompt" />
+        <FieldLabel text="Task" />
         <textarea
-          value={(params.prompt as string) ?? ''}
-          onChange={(e) => onChange({ ...params, prompt: e.target.value })}
+          value={(params.task as string) ?? ''}
+          onChange={(e) => onChange({ ...params, task: e.target.value })}
           rows={4}
-          placeholder="Instructions for the expert..."
-          className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors resize-none"
+          placeholder="What should the expert do? Use {{step_name.field}} for variables"
+          className={textareaCls}
         />
       </div>
       <div>
-        <FieldLabel text="Additional Context" />
+        <FieldLabel text="Context (optional)" />
         <textarea
-          value={(params.additionalContext as string) ?? ''}
-          onChange={(e) => onChange({ ...params, additionalContext: e.target.value })}
+          value={(params.context as string) ?? ''}
+          onChange={(e) => onChange({ ...params, context: e.target.value })}
           rows={2}
-          placeholder="Optional extra context..."
-          className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors resize-none"
+          placeholder="Additional context..."
+          className={textareaCls}
         />
       </div>
       <div>
         <FieldLabel text="Max Turns" />
         <input
-          type="number"
-          min={1}
-          value={(params.maxTurns as number) ?? ''}
-          onChange={(e) =>
-            onChange({
-              ...params,
-              maxTurns: e.target.value ? parseInt(e.target.value) : undefined,
-            })
-          }
-          placeholder="10"
-          className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors"
+          type="number" min={1}
+          value={(params.max_turns as number) ?? 10}
+          onChange={(e) => onChange({ ...params, max_turns: parseInt(e.target.value) || 10 })}
+          className={inputCls}
         />
       </div>
     </div>
   );
 }
 
-function TransformerParams({
-  params,
-  onChange,
-}: {
-  params: Record<string, unknown>;
-  onChange: (p: Record<string, unknown>) => void;
-}) {
-  const operation = (params.operation as string) ?? 'format';
+function ClassifyParams({ params, onChange }: P) {
+  const categories = (params.categories as { id: string; label: string; description: string }[]) ?? [];
+
+  const updateCategory = (index: number, field: string, value: string) => {
+    const updated = [...categories];
+    updated[index] = { ...updated[index], [field]: value };
+    onChange({ ...params, categories: updated });
+  };
+
+  const addCategory = () => {
+    onChange({ ...params, categories: [...categories, { id: crypto.randomUUID(), label: '', description: '' }] });
+  };
+
+  const removeCategory = (index: number) => {
+    onChange({ ...params, categories: categories.filter((_, i) => i !== index) });
+  };
+
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Operation" />
-        <select
-          value={operation}
-          onChange={(e) => onChange({ ...params, operation: e.target.value })}
-          className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent/30 transition-colors"
-        >
-          <option value="format">Format</option>
-          <option value="extract">Extract</option>
-          <option value="filter">Filter</option>
-          <option value="merge">Merge</option>
-          <option value="template">Template</option>
-        </select>
+        <FieldLabel text="Input" />
+        <textarea
+          value={(params.prompt as string) ?? ''}
+          onChange={(e) => onChange({ ...params, prompt: e.target.value })}
+          rows={2}
+          placeholder="What to classify... Use {{step_name.field}}"
+          className={textareaCls}
+        />
       </div>
-
-      {(operation === 'format' || operation === 'template') && (
-        <div>
-          <FieldLabel text="Template" />
-          <textarea
-            value={(params.template as string) ?? ''}
-            onChange={(e) => onChange({ ...params, template: e.target.value })}
-            rows={4}
-            placeholder={
-              operation === 'format'
-                ? '{{key}} interpolation...'
-                : 'Mustache template...'
-            }
-            className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary font-mono placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors resize-none"
-          />
+      <div>
+        <FieldLabel text="Categories" />
+        <div className="space-y-2">
+          {categories.map((cat, i) => (
+            <div key={cat.id ?? i} className="flex gap-2 items-start">
+              <div className="flex-1 space-y-1">
+                <input
+                  value={cat.label}
+                  onChange={(e) => updateCategory(i, 'label', e.target.value)}
+                  placeholder="Label"
+                  className={inputCls}
+                />
+                <input
+                  value={cat.description}
+                  onChange={(e) => updateCategory(i, 'description', e.target.value)}
+                  placeholder="Description"
+                  className={inputCls}
+                />
+              </div>
+              <button
+                onClick={() => removeCategory(i)}
+                className="mt-1 p-1 text-text-tertiary hover:text-red-400 transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
         </div>
-      )}
-
-      {operation === 'extract' && (
-        <div>
-          <FieldLabel text="Path" />
-          <input
-            value={(params.path as string) ?? ''}
-            onChange={(e) => onChange({ ...params, path: e.target.value })}
-            placeholder="data.result.text"
-            className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary font-mono placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors"
-          />
-        </div>
-      )}
-
-      {operation === 'filter' && (
-        <div>
-          <FieldLabel text="Predicate" />
-          <input
-            value={(params.predicate as string) ?? ''}
-            onChange={(e) => onChange({ ...params, predicate: e.target.value })}
-            placeholder="status == 'active'"
-            className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary font-mono placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors"
-          />
-        </div>
-      )}
-
-      {operation === 'merge' && (
-        <div>
-          <FieldLabel text="Strategy" />
-          <select
-            value={(params.strategy as string) ?? 'shallow'}
-            onChange={(e) => onChange({ ...params, strategy: e.target.value })}
-            className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent/30 transition-colors"
-          >
-            <option value="shallow">Shallow</option>
-            <option value="deep">Deep</option>
-          </select>
-        </div>
-      )}
+        <button
+          onClick={addCategory}
+          className="mt-2 text-[11px] text-accent hover:text-accent/80 transition-colors"
+        >
+          + Add Category
+        </button>
+      </div>
     </div>
   );
 }
 
-function ApprovalGateParams({
-  params,
-  onChange,
-}: {
-  params: Record<string, unknown>;
-  onChange: (p: Record<string, unknown>) => void;
-}) {
+function ExtractParams({ params, onChange }: P) {
+  const schema = (params.schema as { id: string; name: string; type: string; description: string }[]) ?? [];
+
+  const updateField = (index: number, field: string, value: string) => {
+    const updated = [...schema];
+    updated[index] = { ...updated[index], [field]: value };
+    onChange({ ...params, schema: updated });
+  };
+
+  const addField = () => {
+    onChange({ ...params, schema: [...schema, { id: crypto.randomUUID(), name: '', type: 'string', description: '' }] });
+  };
+
+  const removeField = (index: number) => {
+    onChange({ ...params, schema: schema.filter((_, i) => i !== index) });
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <FieldLabel text="Input" />
+        <textarea
+          value={(params.prompt as string) ?? ''}
+          onChange={(e) => onChange({ ...params, prompt: e.target.value })}
+          rows={2}
+          placeholder="What to extract from... Use {{step_name.field}}"
+          className={textareaCls}
+        />
+      </div>
+      <div>
+        <FieldLabel text="Schema" />
+        <div className="space-y-2">
+          {schema.map((field, i) => (
+            <div key={field.id ?? i} className="flex gap-2 items-start">
+              <div className="flex-1 space-y-1">
+                <input
+                  value={field.name}
+                  onChange={(e) => updateField(i, 'name', e.target.value)}
+                  placeholder="Field name"
+                  className={inputCls}
+                />
+                <div className="flex gap-1">
+                  <select
+                    value={field.type}
+                    onChange={(e) => updateField(i, 'type', e.target.value)}
+                    className={`${selectCls} w-24`}
+                  >
+                    <option value="string">string</option>
+                    <option value="number">number</option>
+                    <option value="boolean">boolean</option>
+                    <option value="date">date</option>
+                    <option value="array">array</option>
+                  </select>
+                  <input
+                    value={field.description}
+                    onChange={(e) => updateField(i, 'description', e.target.value)}
+                    placeholder="Description"
+                    className={`${inputCls} flex-1`}
+                  />
+                </div>
+              </div>
+              <button
+                onClick={() => removeField(i)}
+                className="mt-1 p-1 text-text-tertiary hover:text-red-400 transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={addField}
+          className="mt-2 text-[11px] text-accent hover:text-accent/80 transition-colors"
+        >
+          + Add Field
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SummarizeParams({ params, onChange }: P) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <FieldLabel text="Input Field" />
+        <input
+          value={(params.input_field as string) ?? ''}
+          onChange={(e) => onChange({ ...params, input_field: e.target.value })}
+          placeholder="{{step_name.field}} to summarize"
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <FieldLabel text="Length" />
+        <select
+          value={(params.max_length as string) ?? 'medium'}
+          onChange={(e) => onChange({ ...params, max_length: e.target.value })}
+          className={selectCls}
+        >
+          <option value="short">Short (1-2 sentences)</option>
+          <option value="medium">Medium (paragraph)</option>
+          <option value="long">Long (detailed)</option>
+        </select>
+      </div>
+      <div>
+        <FieldLabel text="Focus (optional)" />
+        <input
+          value={(params.focus as string) ?? ''}
+          onChange={(e) => onChange({ ...params, focus: e.target.value })}
+          placeholder="What aspect to focus on"
+          className={inputCls}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Knowledge Param Forms ─────────────────────────────────────
+
+function SearchMemoryParams({ params, onChange }: P) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <FieldLabel text="Query" />
+        <textarea
+          value={(params.query as string) ?? ''}
+          onChange={(e) => onChange({ ...params, query: e.target.value })}
+          rows={2}
+          placeholder="What to search for... Use {{step_name.field}}"
+          className={textareaCls}
+        />
+      </div>
+      <div>
+        <FieldLabel text="Scope" />
+        <select
+          value={(params.scope as string) ?? 'global'}
+          onChange={(e) => onChange({ ...params, scope: e.target.value })}
+          className={selectCls}
+        >
+          <option value="global">Global</option>
+          <option value="expert">Expert-specific</option>
+        </select>
+      </div>
+      <div>
+        <FieldLabel text="Max Results" />
+        <input
+          type="number" min={1} max={20}
+          value={(params.max_results as number) ?? 5}
+          onChange={(e) => onChange({ ...params, max_results: parseInt(e.target.value) || 5 })}
+          className={inputCls}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SearchWebParams({ params, onChange }: P) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <FieldLabel text="Query" />
+        <textarea
+          value={(params.query as string) ?? ''}
+          onChange={(e) => onChange({ ...params, query: e.target.value })}
+          rows={2}
+          placeholder="What to search for... Use {{step_name.field}}"
+          className={textareaCls}
+        />
+      </div>
+      <div>
+        <FieldLabel text="Max Results" />
+        <input
+          type="number" min={1} max={10}
+          value={(params.max_results as number) ?? 5}
+          onChange={(e) => onChange({ ...params, max_results: parseInt(e.target.value) || 5 })}
+          className={inputCls}
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-text-secondary">Include AI Answer</span>
+        <Toggle
+          checked={(params.include_ai_answer as boolean) ?? false}
+          onChange={() => onChange({ ...params, include_ai_answer: !params.include_ai_answer })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SaveToMemoryParams({ params, onChange }: P) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <FieldLabel text="Content" />
+        <textarea
+          value={(params.content as string) ?? ''}
+          onChange={(e) => onChange({ ...params, content: e.target.value })}
+          rows={3}
+          placeholder="What to save... Use {{step_name.field}}"
+          className={textareaCls}
+        />
+      </div>
+      <div>
+        <FieldLabel text="Scope" />
+        <select
+          value={(params.scope as string) ?? 'global'}
+          onChange={(e) => onChange({ ...params, scope: e.target.value })}
+          className={selectCls}
+        >
+          <option value="global">Global</option>
+          <option value="expert">Expert-specific</option>
+        </select>
+      </div>
+      <div>
+        <FieldLabel text="Type" />
+        <select
+          value={(params.type as string) ?? 'fact'}
+          onChange={(e) => onChange({ ...params, type: e.target.value })}
+          className={selectCls}
+        >
+          <option value="fact">Fact</option>
+          <option value="knowledge_entry">Knowledge Entry</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
+// ── Integration Param Forms ───────────────────────────────────
+
+function HttpRequestParams({ params, onChange }: P) {
+  const headers = (params.headers as { key: string; value: string }[]) ?? [];
+
+  const updateHeader = (index: number, field: string, value: string) => {
+    const updated = [...headers];
+    updated[index] = { ...updated[index], [field]: value };
+    onChange({ ...params, headers: updated });
+  };
+
+  const addHeader = () => {
+    onChange({ ...params, headers: [...headers, { key: '', value: '' }] });
+  };
+
+  const removeHeader = (index: number) => {
+    onChange({ ...params, headers: headers.filter((_, i) => i !== index) });
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <div className="w-24">
+          <FieldLabel text="Method" />
+          <select
+            value={(params.method as string) ?? 'GET'}
+            onChange={(e) => onChange({ ...params, method: e.target.value })}
+            className={selectCls}
+          >
+            <option>GET</option>
+            <option>POST</option>
+            <option>PUT</option>
+            <option>PATCH</option>
+            <option>DELETE</option>
+          </select>
+        </div>
+        <div className="flex-1">
+          <FieldLabel text="URL" />
+          <input
+            value={(params.url as string) ?? ''}
+            onChange={(e) => onChange({ ...params, url: e.target.value })}
+            placeholder="https://api.example.com/..."
+            className={inputCls}
+          />
+        </div>
+      </div>
+
+      <div>
+        <FieldLabel text="Headers" />
+        <div className="space-y-1.5">
+          {headers.map((h, i) => (
+            <div key={i} className="flex gap-1.5 items-center">
+              <input
+                value={h.key}
+                onChange={(e) => updateHeader(i, 'key', e.target.value)}
+                placeholder="Key"
+                className={`${inputCls} flex-1`}
+              />
+              <input
+                value={h.value}
+                onChange={(e) => updateHeader(i, 'value', e.target.value)}
+                placeholder="Value"
+                className={`${inputCls} flex-1`}
+              />
+              <button
+                onClick={() => removeHeader(i)}
+                className="p-1 text-text-tertiary hover:text-red-400 transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={addHeader}
+          className="mt-1.5 text-[11px] text-accent hover:text-accent/80 transition-colors"
+        >
+          + Add Header
+        </button>
+      </div>
+
+      <div>
+        <FieldLabel text="Body (JSON)" />
+        <textarea
+          value={(params.body as string) ?? ''}
+          onChange={(e) => onChange({ ...params, body: e.target.value })}
+          rows={4}
+          placeholder='{"key": "{{step_name.field}}"}'
+          className={`${textareaCls} font-mono`}
+        />
+      </div>
+
+      <div>
+        <FieldLabel text="Authentication" />
+        <select
+          value={(params.auth_type as string) ?? 'none'}
+          onChange={(e) => onChange({ ...params, auth_type: e.target.value })}
+          className={selectCls}
+        >
+          <option value="none">None</option>
+          <option value="bearer">Bearer Token</option>
+          <option value="basic">Basic Auth</option>
+          <option value="api_key">API Key</option>
+        </select>
+      </div>
+
+      <div>
+        <FieldLabel text="Timeout (seconds)" />
+        <input
+          type="number" min={1}
+          value={(params.timeout as number) ?? 30}
+          onChange={(e) => onChange({ ...params, timeout: parseInt(e.target.value) || 30 })}
+          className={inputCls}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Logic Param Forms ─────────────────────────────────────────
+
+function ConditionParams({ params, onChange }: P) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <FieldLabel text="If" />
+        <input
+          value={(params.field as string) ?? ''}
+          onChange={(e) => onChange({ ...params, field: e.target.value })}
+          placeholder="{{step_name.field}}"
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <FieldLabel text="Operator" />
+        <select
+          value={(params.operator as string) ?? 'equals'}
+          onChange={(e) => onChange({ ...params, operator: e.target.value })}
+          className={selectCls}
+        >
+          <option value="equals">equals</option>
+          <option value="not_equals">not equals</option>
+          <option value="contains">contains</option>
+          <option value="greater_than">greater than</option>
+          <option value="less_than">less than</option>
+          <option value="is_empty">is empty</option>
+          <option value="is_not_empty">is not empty</option>
+          <option value="matches_regex">matches regex</option>
+        </select>
+      </div>
+      <div>
+        <FieldLabel text="Value" />
+        <input
+          value={(params.value as string) ?? ''}
+          onChange={(e) => onChange({ ...params, value: e.target.value })}
+          placeholder="Comparison value"
+          className={inputCls}
+        />
+      </div>
+    </div>
+  );
+}
+
+function LoopParams({ params, onChange }: P) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <FieldLabel text="Items Field" />
+        <input
+          value={(params.items_field as string) ?? ''}
+          onChange={(e) => onChange({ ...params, items_field: e.target.value })}
+          placeholder="{{step_name.results}} — array to iterate"
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <FieldLabel text="Variable Name" />
+        <input
+          value={(params.variable_name as string) ?? 'item'}
+          onChange={(e) => onChange({ ...params, variable_name: e.target.value })}
+          placeholder="item"
+          className={inputCls}
+        />
+        <p className="text-[10px] text-text-tertiary mt-1">
+          Access current item as {'{{'}variable_name{'}}'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function DelayParams({ params, onChange }: P) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex-1">
+        <FieldLabel text="Duration" />
+        <input
+          type="number" min={1}
+          value={(params.duration as number) ?? 1}
+          onChange={(e) => onChange({ ...params, duration: parseInt(e.target.value) || 1 })}
+          className={inputCls}
+        />
+      </div>
+      <div className="flex-1">
+        <FieldLabel text="Unit" />
+        <select
+          value={(params.unit as string) ?? 'seconds'}
+          onChange={(e) => onChange({ ...params, unit: e.target.value })}
+          className={selectCls}
+        >
+          <option value="seconds">Seconds</option>
+          <option value="minutes">Minutes</option>
+          <option value="hours">Hours</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
+function ApprovalGateParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
@@ -253,8 +653,8 @@ function ApprovalGateParams({
           value={(params.summary as string) ?? ''}
           onChange={(e) => onChange({ ...params, summary: e.target.value })}
           rows={3}
-          placeholder="Describe what the reviewer should check before approving..."
-          className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors resize-none"
+          placeholder="Describe what the reviewer should check..."
+          className={textareaCls}
         />
       </div>
       <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
@@ -267,31 +667,130 @@ function ApprovalGateParams({
   );
 }
 
-function StubParams({ type }: { type: string }) {
+// ── Output Param Forms ────────────────────────────────────────
+
+function SendMessageParams({ params, onChange }: P) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <FieldLabel text="Message" />
+        <textarea
+          value={(params.message as string) ?? ''}
+          onChange={(e) => onChange({ ...params, message: e.target.value })}
+          rows={4}
+          placeholder="Message text... Use {{step_name.field}} for variables"
+          className={textareaCls}
+        />
+      </div>
+      <div>
+        <FieldLabel text="Target" />
+        <select
+          value={(params.target as string) ?? 'cerebro_chat'}
+          onChange={(e) => onChange({ ...params, target: e.target.value })}
+          className={selectCls}
+        >
+          <option value="cerebro_chat">Cerebro Chat</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
+function NotificationParams({ params, onChange }: P) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <FieldLabel text="Title" />
+        <input
+          value={(params.title as string) ?? ''}
+          onChange={(e) => onChange({ ...params, title: e.target.value })}
+          placeholder="Notification title"
+          className={inputCls}
+        />
+      </div>
+      <div>
+        <FieldLabel text="Body" />
+        <textarea
+          value={(params.body as string) ?? ''}
+          onChange={(e) => onChange({ ...params, body: e.target.value })}
+          rows={3}
+          placeholder="Notification body... Use {{step_name.field}}"
+          className={textareaCls}
+        />
+      </div>
+      <div>
+        <FieldLabel text="Urgency" />
+        <select
+          value={(params.urgency as string) ?? 'normal'}
+          onChange={(e) => onChange({ ...params, urgency: e.target.value })}
+          className={selectCls}
+        >
+          <option value="normal">Normal</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
+function StubParams({ name }: { name: string }) {
   return (
     <div className="rounded-lg bg-bg-base border border-border-subtle p-3">
       <p className="text-xs text-text-tertiary text-center">
-        {type === 'connector' ? 'Connector' : 'Channel'} configuration coming soon.
+        {name} configuration coming soon.
       </p>
     </div>
   );
+}
+
+// ── Param Form Router ─────────────────────────────────────────
+
+function ParamForm({ actionType, params, onChange }: { actionType: string } & P) {
+  const resolved = resolveActionType(actionType);
+
+  switch (resolved) {
+    // AI
+    case 'ask_ai': return <AskAiParams params={params} onChange={onChange} />;
+    case 'run_expert': return <RunExpertParams params={params} onChange={onChange} />;
+    case 'classify': return <ClassifyParams params={params} onChange={onChange} />;
+    case 'extract': return <ExtractParams params={params} onChange={onChange} />;
+    case 'summarize': return <SummarizeParams params={params} onChange={onChange} />;
+
+    // Knowledge
+    case 'search_memory': return <SearchMemoryParams params={params} onChange={onChange} />;
+    case 'search_web': return <SearchWebParams params={params} onChange={onChange} />;
+    case 'save_to_memory': return <SaveToMemoryParams params={params} onChange={onChange} />;
+
+    // Integrations
+    case 'http_request': return <HttpRequestParams params={params} onChange={onChange} />;
+
+    // Logic
+    case 'condition': return <ConditionParams params={params} onChange={onChange} />;
+    case 'loop': return <LoopParams params={params} onChange={onChange} />;
+    case 'delay': return <DelayParams params={params} onChange={onChange} />;
+    case 'approval_gate': return <ApprovalGateParams params={params} onChange={onChange} />;
+
+    // Output
+    case 'send_message': return <SendMessageParams params={params} onChange={onChange} />;
+    case 'send_notification': return <NotificationParams params={params} onChange={onChange} />;
+
+    default:
+      return <StubParams name={ACTION_META[actionType]?.name ?? actionType} />;
+  }
 }
 
 // ── Main Component ────────────────────────────────────────────
 
 interface StepConfigPanelProps {
   node: Node;
-  onUpdate: (nodeId: string, partial: Partial<RoutineStepData>) => void;
+  onUpdate: (nodeId: string, partial: Record<string, unknown>) => void;
   onClose: () => void;
 }
 
-export default function StepConfigPanel({
-  node,
-  onUpdate,
-  onClose,
-}: StepConfigPanelProps) {
+export default function StepConfigPanel({ node, onUpdate, onClose }: StepConfigPanelProps) {
   const d = node.data as RoutineStepData;
-  const meta = ACTION_META[d.actionType];
+  const resolved = resolveActionType(d.actionType);
+  const meta = ACTION_META[resolved] ?? ACTION_META[d.actionType];
 
   const [stepName, setStepName] = useState(d.name);
 
@@ -308,9 +807,19 @@ export default function StepConfigPanel({
     }
   };
 
-  const handleParamsChange = (params: Record<string, unknown>) => {
-    onUpdate(node.id, { params });
-  };
+  const paramsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleParamsChange = useCallback(
+    (params: Record<string, unknown>) => {
+      if (paramsTimerRef.current) clearTimeout(paramsTimerRef.current);
+      paramsTimerRef.current = setTimeout(() => {
+        onUpdate(node.id, { params });
+      }, 150);
+    },
+    [node.id, onUpdate],
+  );
+  useEffect(() => {
+    return () => { if (paramsTimerRef.current) clearTimeout(paramsTimerRef.current); };
+  }, []);
 
   return (
     <div className="absolute top-0 right-0 bottom-0 w-[380px] bg-bg-surface border-l border-border-subtle animate-slide-in-right z-30 flex flex-col">
@@ -339,9 +848,7 @@ export default function StepConfigPanel({
                 value={stepName}
                 onChange={(e) => setStepName(e.target.value)}
                 onBlur={handleNameBlur}
-                onKeyDown={(e) =>
-                  e.key === 'Enter' && (e.target as HTMLInputElement).blur()
-                }
+                onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
                 className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors"
               />
             </div>
@@ -356,10 +863,7 @@ export default function StepConfigPanel({
                     <meta.icon size={12} style={{ color: meta.colorHex }} />
                   </div>
                 )}
-                <span
-                  className="text-xs font-medium"
-                  style={{ color: meta?.colorHex }}
-                >
+                <span className="text-xs font-medium" style={{ color: meta?.colorHex }}>
                   {meta?.name ?? d.actionType}
                 </span>
               </div>
@@ -369,25 +873,11 @@ export default function StepConfigPanel({
 
         {/* Parameters */}
         <Section label="PARAMETERS">
-          {d.actionType === 'model_call' && (
-            <ModelCallParams params={d.params} onChange={handleParamsChange} />
-          )}
-          {d.actionType === 'expert_step' && (
-            <ExpertStepParams params={d.params} onChange={handleParamsChange} />
-          )}
-          {d.actionType === 'transformer' && (
-            <TransformerParams params={d.params} onChange={handleParamsChange} />
-          )}
-          {d.actionType === 'approval_gate' && (
-            <ApprovalGateParams params={d.params} onChange={handleParamsChange} />
-          )}
-          {(d.actionType === 'connector' || d.actionType === 'channel') && (
-            <StubParams type={d.actionType} />
-          )}
+          <ParamForm actionType={d.actionType} params={d.params} onChange={handleParamsChange} />
         </Section>
 
         {/* Error Handling (hidden for approval gates) */}
-        {d.actionType !== 'approval_gate' && (
+        {resolved !== 'approval_gate' && (
           <Section label="ERROR HANDLING">
             <div className="space-y-3">
               <div>
@@ -395,11 +885,9 @@ export default function StepConfigPanel({
                 <select
                   value={d.onError}
                   onChange={(e) =>
-                    onUpdate(node.id, {
-                      onError: e.target.value as 'fail' | 'skip' | 'retry',
-                    })
+                    onUpdate(node.id, { onError: e.target.value as 'fail' | 'skip' | 'retry' })
                   }
-                  className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent/30 transition-colors"
+                  className={selectCls}
                 >
                   <option value="fail">Fail (stop routine)</option>
                   <option value="skip">Skip (continue)</option>
@@ -411,16 +899,10 @@ export default function StepConfigPanel({
                 <div>
                   <FieldLabel text="Max Retries" />
                   <input
-                    type="number"
-                    min={1}
-                    max={10}
+                    type="number" min={1} max={10}
                     value={d.maxRetries ?? 1}
-                    onChange={(e) =>
-                      onUpdate(node.id, {
-                        maxRetries: parseInt(e.target.value) || 1,
-                      })
-                    }
-                    className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary focus:outline-none focus:border-accent/30 transition-colors"
+                    onChange={(e) => onUpdate(node.id, { maxRetries: parseInt(e.target.value) || 1 })}
+                    className={inputCls}
                   />
                 </div>
               )}
@@ -428,19 +910,15 @@ export default function StepConfigPanel({
               <div>
                 <FieldLabel text="Timeout (ms)" />
                 <input
-                  type="number"
-                  min={1000}
-                  step={1000}
+                  type="number" min={1000} step={1000}
                   value={d.timeoutMs ?? ''}
                   onChange={(e) =>
                     onUpdate(node.id, {
-                      timeoutMs: e.target.value
-                        ? parseInt(e.target.value)
-                        : undefined,
+                      timeoutMs: e.target.value ? parseInt(e.target.value) : undefined,
                     })
                   }
                   placeholder="300000"
-                  className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors"
+                  className={inputCls}
                 />
               </div>
             </div>
@@ -448,7 +926,7 @@ export default function StepConfigPanel({
         )}
 
         {/* Approval (hidden for approval gates — always on) */}
-        {d.actionType !== 'approval_gate' && (
+        {resolved !== 'approval_gate' && (
           <Section label="APPROVAL">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -459,11 +937,7 @@ export default function StepConfigPanel({
               </div>
               <Toggle
                 checked={d.requiresApproval}
-                onChange={() =>
-                  onUpdate(node.id, {
-                    requiresApproval: !d.requiresApproval,
-                  })
-                }
+                onChange={() => onUpdate(node.id, { requiresApproval: !d.requiresApproval })}
               />
             </div>
           </Section>
@@ -480,7 +954,7 @@ export default function StepConfigPanel({
                 >
                   <span className="text-text-secondary">{m.sourceStepId}</span>
                   <span>.{m.sourceField}</span>
-                  <span className="text-accent">→</span>
+                  <span className="text-accent">&rarr;</span>
                   <span className="text-text-secondary">{m.targetField}</span>
                 </div>
               ))}

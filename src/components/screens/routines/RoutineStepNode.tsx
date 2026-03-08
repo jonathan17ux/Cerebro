@@ -2,23 +2,106 @@ import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Shield } from 'lucide-react';
 import clsx from 'clsx';
-import { ACTION_META } from '../../../utils/step-defaults';
+import { ACTION_META, CATEGORY_MAP, resolveActionType } from '../../../utils/step-defaults';
+import { getHandleType, HANDLE_COLORS } from '../../../utils/handle-types';
 import type { RoutineStepData } from '../../../utils/dag-flow-mapping';
+
+/** Background tint per category (Tailwind-compatible). */
+const CATEGORY_BG: Record<string, string> = {
+  ai: 'bg-violet-500/5',
+  knowledge: 'bg-indigo-500/5',
+  integrations: 'bg-blue-500/5',
+  logic: 'bg-slate-400/5',
+  output: 'bg-emerald-500/5',
+};
 
 function RoutineStepNode({ data, selected }: NodeProps) {
   const d = data as RoutineStepData;
-  const meta = ACTION_META[d.actionType];
+  const resolved = resolveActionType(d.actionType);
+  const meta = ACTION_META[resolved] ?? ACTION_META[d.actionType];
   const Icon = meta?.icon;
   const colorHex = meta?.colorHex ?? '#06b6d4';
-  const isApprovalGate = d.actionType === 'approval_gate';
+  const category = meta?.category;
+  const categoryMeta = category ? CATEGORY_MAP[category] : null;
+  const categoryColor = categoryMeta?.colorHex ?? colorHex;
+
+  // Handle colors based on output type
+  const handleType = getHandleType(resolved);
+  const handleColor = HANDLE_COLORS[handleType];
 
   // Truncated preview of params
   const preview = (() => {
     const p = d.params;
-    if (d.actionType === 'model_call' || d.actionType === 'expert_step') {
+
+    // AI actions
+    if (resolved === 'ask_ai') {
       const prompt = (p.prompt as string) || '';
       return prompt.length > 40 ? prompt.slice(0, 40) + '...' : prompt || 'No prompt set';
     }
+    if (resolved === 'run_expert') {
+      const task = (p.task as string) || (p.prompt as string) || '';
+      return task.length > 40 ? task.slice(0, 40) + '...' : task || 'No task set';
+    }
+    if (resolved === 'classify') {
+      const cats = p.categories;
+      if (Array.isArray(cats) && cats.length > 0) return `${cats.length} categories`;
+      return 'No categories defined';
+    }
+    if (resolved === 'extract') {
+      const schema = p.schema;
+      if (Array.isArray(schema) && schema.length > 0) return `${schema.length} fields`;
+      return 'No schema defined';
+    }
+    if (resolved === 'summarize') {
+      return (p.max_length as string) || 'medium';
+    }
+
+    // Knowledge actions
+    if (resolved === 'search_memory' || resolved === 'search_web') {
+      const q = (p.query as string) || '';
+      return q.length > 40 ? q.slice(0, 40) + '...' : q || 'No query set';
+    }
+    if (resolved === 'save_to_memory') {
+      return (p.scope as string) || 'global';
+    }
+
+    // Integrations
+    if (resolved === 'http_request') {
+      const method = (p.method as string) || 'GET';
+      const url = (p.url as string) || '';
+      return url ? `${method} ${url.slice(0, 30)}` : 'Not configured';
+    }
+
+    // Logic
+    if (resolved === 'condition') {
+      const field = (p.field as string) || '';
+      const op = (p.operator as string) || '';
+      const val = (p.value as string) || '';
+      return field ? `${field} ${op} ${val}`.trim().slice(0, 40) : 'Not configured';
+    }
+    if (resolved === 'loop') {
+      return (p.items_field as string) || 'No items field';
+    }
+    if (resolved === 'delay') {
+      const dur = p.duration ?? '';
+      const unit = (p.unit as string) || 'seconds';
+      return dur ? `${dur} ${unit}` : 'Not configured';
+    }
+    if (resolved === 'approval_gate') {
+      const summary = (p.summary as string) || '';
+      return summary.length > 40 ? summary.slice(0, 40) + '...' : summary || 'Approval checkpoint';
+    }
+
+    // Output
+    if (resolved === 'send_message') {
+      const msg = (p.message as string) || '';
+      return msg.length > 40 ? msg.slice(0, 40) + '...' : msg || 'No message set';
+    }
+    if (resolved === 'send_notification') {
+      return (p.title as string) || 'No title set';
+    }
+
+    // Legacy fallbacks
     if (d.actionType === 'transformer') {
       return (p.operation as string) || 'format';
     }
@@ -28,28 +111,36 @@ function RoutineStepNode({ data, selected }: NodeProps) {
     if (d.actionType === 'channel') {
       return (p.channel as string) || 'Not configured';
     }
-    if (isApprovalGate) {
-      const summary = (p.summary as string) || '';
-      return summary.length > 40 ? summary.slice(0, 40) + '...' : summary || 'Approval checkpoint';
-    }
+
     return '';
   })();
 
   return (
     <div
       className={clsx(
-        'w-[200px] rounded-lg border bg-bg-surface transition-all duration-150',
+        'w-[200px] rounded-lg border transition-all duration-150',
+        CATEGORY_BG[category ?? ''] || 'bg-bg-surface',
         selected
-          ? isApprovalGate
-            ? 'border-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.25)]'
-            : 'border-accent shadow-[0_0_12px_rgba(6,182,212,0.25)]'
-          : 'border-border-subtle hover:border-border-default',
+          ? 'shadow-lg'
+          : 'hover:border-border-default',
+        !selected && 'border-border-subtle',
       )}
+      style={{
+        borderLeftWidth: 4,
+        borderLeftColor: categoryColor,
+        ...(selected
+          ? {
+              borderColor: categoryColor,
+              boxShadow: `0 0 12px ${categoryColor}40`,
+            }
+          : {}),
+      }}
     >
       <Handle
         type="target"
         position={Position.Top}
-        className="!bg-accent !border-bg-surface !w-2 !h-2"
+        className="!border-bg-surface !w-2 !h-2"
+        style={{ backgroundColor: handleColor }}
       />
 
       {/* Top row: icon + type label */}
@@ -90,7 +181,8 @@ function RoutineStepNode({ data, selected }: NodeProps) {
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!bg-accent !border-bg-surface !w-2 !h-2"
+        className="!border-bg-surface !w-2 !h-2"
+        style={{ backgroundColor: handleColor }}
       />
     </div>
   );

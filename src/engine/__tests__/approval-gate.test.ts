@@ -371,7 +371,7 @@ describe('step defaults: approval_gate', () => {
     const meta = ACTION_META['approval_gate'];
     expect(meta).toBeDefined();
     expect(meta.name).toBe('Approval Gate');
-    expect(meta.color).toBe('amber');
-    expect(meta.colorHex).toBe('#f59e0b');
+    expect(meta.color).toBe('slate');
+    expect(meta.colorHex).toBe('#64748b');
   });
 });
