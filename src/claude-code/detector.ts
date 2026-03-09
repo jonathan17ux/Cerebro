@@ -6,6 +6,9 @@
  */
 
 import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { ClaudeCodeInfo } from '../types/providers';
 
 let cachedInfo: ClaudeCodeInfo = { status: 'unknown' };
@@ -26,6 +29,49 @@ function runCommand(cmd: string, args: string[]): Promise<string> {
   });
 }
 
+/**
+ * Returns common macOS/Linux installation paths for the `claude` binary.
+ * Electron apps don't inherit the user's shell PATH, so `which` often fails
+ * even when Claude Code is installed via npm/nvm.
+ */
+function getFallbackPaths(): string[] {
+  const home = os.homedir();
+  const candidates = [
+    '/usr/local/bin/claude',
+    path.join(home, '.npm-global', 'bin', 'claude'),
+  ];
+
+  // Expand ~/.nvm/versions/node/*/bin/claude
+  const nvmVersionsDir = path.join(home, '.nvm', 'versions', 'node');
+  try {
+    const nodeDirs = fs.readdirSync(nvmVersionsDir);
+    for (const dir of nodeDirs) {
+      candidates.push(path.join(nvmVersionsDir, dir, 'bin', 'claude'));
+    }
+  } catch {
+    // nvm not installed — skip
+  }
+
+  return candidates;
+}
+
+/**
+ * Tries each fallback path: checks existence then runs `--version` to verify.
+ * Returns the first working path, or null if none work.
+ */
+async function findInFallbackPaths(): Promise<string | null> {
+  for (const candidate of getFallbackPaths()) {
+    if (!fs.existsSync(candidate)) continue;
+    try {
+      await runCommand(candidate, ['--version']);
+      return candidate;
+    } catch {
+      // Binary exists but doesn't run — skip
+    }
+  }
+  return null;
+}
+
 export async function detectClaudeCode(): Promise<ClaudeCodeInfo> {
   cachedInfo = { status: 'detecting' };
 
@@ -36,8 +82,19 @@ export async function detectClaudeCode(): Promise<ClaudeCodeInfo> {
     try {
       claudePath = await runCommand(whichCmd, ['claude']);
     } catch {
-      cachedInfo = { status: 'unavailable' };
-      return cachedInfo;
+      // On macOS/Linux, Electron doesn't inherit shell PATH — try common locations
+      if (process.platform !== 'win32') {
+        const fallback = await findInFallbackPaths();
+        if (fallback) {
+          claudePath = fallback;
+        } else {
+          cachedInfo = { status: 'unavailable' };
+          return cachedInfo;
+        }
+      } else {
+        cachedInfo = { status: 'unavailable' };
+        return cachedInfo;
+      }
     }
 
     // Get version

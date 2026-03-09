@@ -457,6 +457,7 @@ export class AgentRuntime {
     });
 
     const runner = new ClaudeCodeRunner();
+    const toolsUsed = new Set<string>();
 
     const activeRun: ActiveRun = {
       runId,
@@ -484,6 +485,9 @@ export class AgentRuntime {
       if (event.type === 'text_delta') {
         activeRun.accumulatedText += event.delta;
       }
+      if (event.type === 'tool_start') {
+        toolsUsed.add((event as any).toolName);
+      }
       if (!webContents.isDestroyed()) {
         webContents.send(channel, event);
       }
@@ -491,7 +495,7 @@ export class AgentRuntime {
 
     runner.on('done', (messageContent: string) => {
       log.info('Claude Code run completed', { text_length: messageContent.length });
-      this.finalizeRun(runId, 'completed', webContents, messageContent);
+      this.finalizeRun(runId, 'completed', webContents, messageContent, undefined, toolsUsed);
 
       const result: SubAgentResult = {
         runId,
@@ -510,7 +514,7 @@ export class AgentRuntime {
           error,
         } as RendererAgentEvent);
       }
-      this.finalizeRun(runId, 'error', webContents, activeRun.accumulatedText, error);
+      this.finalizeRun(runId, 'error', webContents, activeRun.accumulatedText, error, toolsUsed);
 
       const result: SubAgentResult = {
         runId,

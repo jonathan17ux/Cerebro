@@ -213,49 +213,42 @@ Claude Code's `-p` flag with `--output-format stream-json` emits NDJSON (one JSO
 ### Message Type Mapping
 
 ```
-Claude Code NDJSON                    Cerebro RendererAgentEvent
-─────────────────────                 ─────────────────────────
-{ type: "system" }                    (no-op, session init)
+Claude Code NDJSON (stream-json)      Cerebro RendererAgentEvent
+────────────────────────────────      ─────────────────────────
+{ type: "system" }                    (ignored — session init)
 
-{ type: "stream_event",
-  event: {
-    type: "message_start"            { type: "turn_start", turn: N }
+{ type: "assistant",                  { type: "text_delta",
+  message: { content: [                 delta: "..." }
+    { type: "text", text: "..." }     (one event per text block)
+  ] }
+}
+
+{ type: "content_block_delta",        { type: "text_delta",
+  delta: {                              delta: "..." }
+    type: "text_delta",
+    text: "..."
   }
 }
 
-{ type: "stream_event",
-  event: {
-    type: "content_block_delta",
-    delta: {
-      type: "text_delta",            { type: "text_delta", delta: "..." }
-      text: "..."
+{ type: "assistant",                  { type: "tool_start",
+  message: { content: [                 toolCallId: "...",
+    { type: "tool_use",                 toolName: "Read",
+      id: "...",                        args: { ... } }
+      name: "Read",
+      input: { ... }
     }
-  }
+  ] }
 }
 
-{ type: "stream_event",
-  event: {
-    type: "content_block_start",
-    content_block: {
-      type: "tool_use",              { type: "tool_start",
-      id: "...",                       toolCallId: "...",
-      name: "Read"                     toolName: "Read",
-    }                                  args: {} }
-  }
-}
+{ type: "tool_result",                { type: "tool_end",
+  tool_use_id: "...",                   toolCallId: "...",
+  name: "Read",                         toolName: "Read",
+  content: "...",                        result: "...",
+  is_error: false }                     isError: false }
 
-{ type: "assistant",                 { type: "tool_end",
-  message: {                           toolCallId: "...",
-    content: [                         toolName: "Read",
-      { type: "tool_result",           result: "...",
-        content: "..." }               isError: false }
-    ]
-  }
-}
-
-{ type: "result",                    { type: "done",
-  result: "...",                       runId: "...",
-  session_id: "..." }                  messageContent: "..." }
+{ type: "result",                     { type: "done",
+  result: "..." }                       runId: "...",
+                                        messageContent: "..." }
 ```
 
 ### Process Lifecycle

@@ -501,6 +501,35 @@ def _build_routing_table(experts: list) -> str | None:
            "\nUse this table to quickly match user requests to the right expert."
 
 
+def _score_expert_relevance(expert, query_words: set[str]) -> float:
+    """Score an expert's relevance by keyword overlap with the user's message."""
+    expert_words: set[str] = set()
+    for text in (expert.name or "", expert.domain or "", expert.description or ""):
+        for w in text.split():
+            cleaned = _PUNCT_RE.sub("", w.lower())
+            if cleaned and cleaned not in _ROUTING_STOPWORDS and len(cleaned) > 1:
+                expert_words.add(cleaned)
+    if not expert_words or not query_words:
+        return 0.0
+    return len(query_words & expert_words) / len(query_words | expert_words)
+
+
+def _truncate(text: str, max_chars: int) -> str:
+    """Truncate text at a sentence boundary, fall back to word boundary."""
+    if len(text) <= max_chars:
+        return text
+    truncated = text[:max_chars]
+    # Try sentence boundary
+    last_period = truncated.rfind(". ")
+    if last_period > max_chars // 2:
+        return truncated[: last_period + 1] + " ...(truncated)"
+    # Fall back to word boundary
+    last_space = truncated.rfind(" ")
+    if last_space > 0:
+        return truncated[:last_space] + " ...(truncated)"
+    return truncated + "...(truncated)"
+
+
 def _build_routine_catalog(db: Session) -> str:
     """Build a formatted catalog of available routines for the system prompt."""
     from sqlalchemy import nullslast
@@ -633,24 +662,44 @@ async def assemble_system_prompt(
 
         if is_claude_code and has_experts:
             # Claude Code mode: inject expert system prompts, context files, and learned facts
+            # with relevance scoring and budget management
             sections.append(catalog_text)
 
-            # Compute query text for expert fact recall
+            # Extract query words for relevance scoring and fact recall
             expert_query_text = ""
+            query_words: set[str] = set()
             if recent_messages:
                 expert_query_text = " ".join(
                     m.get("content", "") for m in recent_messages[-3:]
                 )
+                for w in expert_query_text.split():
+                    cleaned = _PUNCT_RE.sub("", w.lower())
+                    if cleaned and cleaned not in _ROUTING_STOPWORDS and len(cleaned) > 1:
+                        query_words.add(cleaned)
 
+            # Score and sort experts by relevance (stable: ties preserve original order)
+            scored_experts = [
+                (i, _score_expert_relevance(e, query_words), e)
+                for i, e in enumerate(catalog_experts)
+            ]
+            scored_experts.sort(key=lambda x: (-x[1], x[0]))
+
+            EXPERT_PROMPT_CAP = 2000
+            CONTEXT_FILE_CAP = 1500
+            TOTAL_BUDGET = 15000
+            budget_used = 0
             expert_sections = []
-            for e in catalog_experts[:5]:  # Cap at 5 experts to manage context size
+
+            for _idx, _score, e in scored_experts[:5]:
                 parts = [f"### {e.name}"]
                 if e.system_prompt:
-                    parts.append(e.system_prompt)
-                # Include expert context file
+                    parts.append(_truncate(e.system_prompt, EXPERT_PROMPT_CAP))
+                # Include expert context file (truncated)
                 expert_ctx = db.get(Setting, f"memory:context:expert:{e.id}")
                 if expert_ctx and expert_ctx.value.strip():
-                    parts.append(f"**Context:**\n{expert_ctx.value}")
+                    parts.append(
+                        f"**Context:**\n{_truncate(expert_ctx.value, CONTEXT_FILE_CAP)}"
+                    )
                     context_files_used.append(f"expert:{e.id}")
                 # Include expert-scoped learned facts
                 if expert_query_text:
@@ -662,7 +711,15 @@ async def assemble_system_prompt(
                         parts.append(
                             f"**Learned facts:**\n" + "\n".join(fact_lines)
                         )
-                expert_sections.append("\n".join(parts))
+                section_text = "\n".join(parts)
+                section_size = len(section_text)
+
+                # Budget check — always include at least 1 expert
+                if expert_sections and budget_used + section_size > TOTAL_BUDGET:
+                    break
+                expert_sections.append(section_text)
+                budget_used += section_size
+
             if expert_sections:
                 sections.append(
                     "## Expert Knowledge\n"
