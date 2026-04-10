@@ -105,8 +105,9 @@ def create_expert(body: ExpertCreate, db=Depends(get_db)):
     db.flush()
 
     # Auto-assign default skills to new expert
-    from skills.seed import assign_default_skills
+    from skills.seed import assign_default_skills, assign_category_skills
     assign_default_skills(db, expert.id)
+    assign_category_skills(db, expert.id, expert.domain)
 
     db.commit()
     db.refresh(expert)

@@ -554,20 +554,22 @@ From the conversation context, determine:
 - **name** — a friendly, human-readable display name with proper capitalization and spaces (e.g. "Fitness Coach", "Travel Planner", "Recipe Assistant"). NEVER use slugs, kebab-case, or technical identifiers.
 - **description** — one sentence explaining what the expert does
 - **system_prompt** — 2-4 paragraphs about the expert's role, tone, and behavior
+- **domain** — a category keyword that matches the expert's area. Known domains with pre-built skills: \`fitness\`, \`engineering\`, \`content\`, \`finance\`, \`productivity\`, \`operations\`, \`support\`. When a domain is set, the backend automatically assigns all matching skills from the skills library to the new expert.
 
-Then run this single Bash command, replacing the three placeholder strings:
+Then run this single Bash command, replacing the placeholder strings:
 
 \`\`\`bash
 jq -n \\
   --arg name "REPLACE_NAME" \\
   --arg description "REPLACE_DESCRIPTION" \\
   --arg system_prompt "REPLACE_SYSTEM_PROMPT" \\
-  '{name: $name, description: $description, system_prompt: $system_prompt}' \\
+  --arg domain "REPLACE_DOMAIN" \\
+  '{name: $name, description: $description, system_prompt: $system_prompt, domain: $domain}' \\
   > "$CLAUDE_PROJECT_DIR/.claude/tmp/new-expert.json" && \\
 bash "$CLAUDE_PROJECT_DIR/.claude/scripts/create-expert.sh" "$CLAUDE_PROJECT_DIR/.claude/tmp/new-expert.json"
 \`\`\`
 
-If the output says **SUCCESS**, tell the user the expert is ready — it appears in the sidebar automatically.
+If the output says **SUCCESS**, tell the user the expert is ready — it appears in the sidebar automatically. Mention which skills were auto-assigned based on the domain (e.g. "I've created your Running Coach with all 6 fitness skills pre-loaded").
 If the output says **ERROR**, report the error to the user.
 `,
     },

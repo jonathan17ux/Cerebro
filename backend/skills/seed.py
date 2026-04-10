@@ -1137,6 +1137,36 @@ def assign_default_skills(db: Session, expert_id: str) -> None:
             ))
 
 
+def assign_category_skills(db: Session, expert_id: str, domain: str | None) -> None:
+    """Auto-assign non-default skills whose category matches the expert's domain."""
+    if not domain:
+        return
+
+    category_skills = db.query(Skill).filter(
+        Skill.category == domain,
+        Skill.is_enabled == True,  # noqa: E712
+        Skill.is_default == False,  # noqa: E712
+    ).all()
+    if not category_skills:
+        return
+
+    skill_ids = [s.id for s in category_skills]
+    already_assigned = set(
+        row[0] for row in
+        db.query(ExpertSkill.skill_id)
+        .filter(ExpertSkill.expert_id == expert_id, ExpertSkill.skill_id.in_(skill_ids))
+        .all()
+    )
+
+    for skill in category_skills:
+        if skill.id not in already_assigned:
+            db.add(ExpertSkill(
+                id=_uuid_hex(),
+                expert_id=expert_id,
+                skill_id=skill.id,
+            ))
+
+
 def _assign_defaults_to_unassigned_experts(db: Session) -> None:
     """For existing experts with zero skills, assign all default skills."""
     default_skills = db.query(Skill).filter(
