@@ -38,6 +38,7 @@ export const IPC_CHANNELS = {
   INSTALLER_SYNC_EXPERT: 'installer:sync-expert',
   INSTALLER_REMOVE_EXPERT: 'installer:remove-expert',
   INSTALLER_SYNC_ALL: 'installer:sync-all',
+  EXPERTS_CHANGED: 'experts:changed',
 } as const;
 
 // --- Backend Request/Response ---
@@ -178,6 +179,7 @@ export interface InstallerAPI {
   syncExpert(expertId: string): Promise<{ ok: boolean; error?: string }>;
   removeExpert(expertId: string): Promise<{ ok: boolean; error?: string }>;
   syncAll(): Promise<{ ok: boolean; error?: string }>;
+  onExpertsChanged(callback: () => void): () => void;
 }
 
 // --- Preload API exposed on window.cerebro ---

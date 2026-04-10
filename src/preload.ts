@@ -129,6 +129,11 @@ const api: CerebroAPI = {
     syncAll() {
       return ipcRenderer.invoke(IPC_CHANNELS.INSTALLER_SYNC_ALL);
     },
+    onExpertsChanged(callback: () => void): () => void {
+      const listener = () => callback();
+      ipcRenderer.on(IPC_CHANNELS.EXPERTS_CHANGED, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.EXPERTS_CHANGED, listener);
+    },
   },
 };
 

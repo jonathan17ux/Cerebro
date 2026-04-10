@@ -3,6 +3,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   useMemo,
   type ReactNode,
 } from 'react';
@@ -258,6 +259,14 @@ export function ExpertProvider({ children }: { children: ReactNode }) {
     },
     [updateExpert],
   );
+
+  // Re-fetch experts when the installer syncs (e.g. after a skill creates one)
+  useEffect(() => {
+    const unsubscribe = window.cerebro.installer.onExpertsChanged(() => {
+      loadExperts();
+    });
+    return unsubscribe;
+  }, [loadExperts]);
 
   return (
     <ExpertContext.Provider

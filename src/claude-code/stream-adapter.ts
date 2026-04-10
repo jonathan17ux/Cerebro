@@ -5,8 +5,9 @@
  * Always launches with `cwd: <cerebro-data-dir>` so Claude Code
  * auto-discovers Cerebro's project-scoped subagents and skills under
  * `<cerebro-data-dir>/.claude/`. The subagent identified by `agentName`
- * defines its own system prompt and tools — no `--append-system-prompt`,
- * no `--allowedTools`, no MCP bridge.
+ * defines its own system prompt and tools — no `--allowedTools`, no MCP
+ * bridge. Uses `--dangerously-skip-permissions` since stdin is ignored
+ * (interactive approval is impossible).
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -40,6 +41,8 @@ export class ClaudeCodeRunner extends EventEmitter {
   private accumulatedText = '';
   private stderrTail = '';
   private killed = false;
+  private closeHandled = false;
+  private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
 
   start(options: ClaudeCodeRunOptions): void {
     const { runId, prompt, agentName, cwd } = options;
@@ -60,6 +63,8 @@ export class ClaudeCodeRunner extends EventEmitter {
       '--output-format', 'stream-json',
       '--verbose',
       '--max-turns', '15',
+      '--dangerously-skip-permissions',
+      '--append-system-prompt', 'CRITICAL: Never generate text on behalf of the user. Never output "User:" or simulate user messages. Your response ends when you have answered the request.',
     ];
 
     // Build env: inherit process.env but strip CLAUDECODE to avoid nested session error
@@ -71,6 +76,18 @@ export class ClaudeCodeRunner extends EventEmitter {
       cwd,
       env,
     });
+
+    // Hard timeout — kill subprocess if it hasn't exited in 5 minutes
+    const SUBPROCESS_TIMEOUT_MS = 5 * 60 * 1000;
+    this.timeoutTimer = setTimeout(() => {
+      if (this.process && !this.process.killed && !this.killed) {
+        this.killed = true;
+        this.process.kill('SIGTERM');
+        const error = 'Claude Code subprocess timed out after 5 minutes';
+        this.emit('event', { type: 'error', runId, error } as RendererAgentEvent);
+        this.emit('error', error);
+      }
+    }, SUBPROCESS_TIMEOUT_MS);
 
     let buffer = '';
 
@@ -95,6 +112,10 @@ export class ClaudeCodeRunner extends EventEmitter {
     });
 
     this.process.on('close', (code) => {
+      if (this.closeHandled) return;
+      this.closeHandled = true;
+      if (this.timeoutTimer) clearTimeout(this.timeoutTimer);
+
       // Process remaining buffer
       if (buffer.trim()) {
         this.handleJsonLine(buffer.trim(), runId);
@@ -103,14 +124,19 @@ export class ClaudeCodeRunner extends EventEmitter {
       if (this.killed) return;
 
       if (code !== 0 && code !== null) {
-        const detail = this.stderrTail
-          ? `Claude Code exited with code ${code}: ${this.stderrTail}`
-          : `Claude Code exited with code ${code}`;
-        this.emit('event', {
-          type: 'error',
-          runId,
-          error: detail,
-        } as RendererAgentEvent);
+        let detail: string;
+        if (this.stderrTail.includes('max turns')) {
+          detail = 'Claude Code reached the maximum number of turns without completing the task. Try a simpler request.';
+        } else if (this.stderrTail.includes('rate limit') || this.stderrTail.includes('429')) {
+          detail = 'Rate limited by the API. Please wait a moment and try again.';
+        } else if (this.stderrTail.includes('authentication') || this.stderrTail.includes('401')) {
+          detail = 'Authentication error. Check your API key in Settings.';
+        } else {
+          detail = this.stderrTail
+            ? `Claude Code error (code ${code}): ${this.stderrTail}`
+            : `Claude Code exited unexpectedly (code ${code})`;
+        }
+        this.emit('event', { type: 'error', runId, error: detail } as RendererAgentEvent);
         this.emit('error', detail);
       } else {
         this.emit('event', {
@@ -122,8 +148,32 @@ export class ClaudeCodeRunner extends EventEmitter {
       }
     });
 
+    // Fallback: 'exit' fires when process exits even if stdio isn't fully closed.
+    // If 'close' hasn't fired within 5s of 'exit', force finalization.
+    this.process.on('exit', (code, signal) => {
+      setTimeout(() => {
+        if (!this.closeHandled && !this.killed) {
+          this.closeHandled = true;
+          if (this.timeoutTimer) clearTimeout(this.timeoutTimer);
+          if (code !== 0 && code !== null) {
+            const detail = `Claude Code exited (code ${code}, signal ${signal})`;
+            this.emit('event', { type: 'error', runId, error: detail } as RendererAgentEvent);
+            this.emit('error', detail);
+          } else {
+            this.emit('event', {
+              type: 'done',
+              runId,
+              messageContent: this.accumulatedText,
+            } as RendererAgentEvent);
+            this.emit('done', this.accumulatedText);
+          }
+        }
+      }, 5000);
+    });
+
     this.process.on('error', (err) => {
       if (this.killed) return;
+      if (this.timeoutTimer) clearTimeout(this.timeoutTimer);
       this.emit('event', {
         type: 'error',
         runId,
@@ -135,6 +185,7 @@ export class ClaudeCodeRunner extends EventEmitter {
 
   abort(): void {
     this.killed = true;
+    if (this.timeoutTimer) clearTimeout(this.timeoutTimer);
     if (!this.process || this.process.killed) return;
 
     this.process.kill('SIGTERM');

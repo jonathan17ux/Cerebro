@@ -15,7 +15,8 @@ import crypto from 'node:crypto';
 import type { WebContents } from 'electron';
 import type { AgentRunRequest, ActiveRunInfo, RendererAgentEvent } from './types';
 import { ClaudeCodeRunner } from '../claude-code/stream-adapter';
-import { getAgentNameForExpert } from '../claude-code/installer';
+import { getAgentNameForExpert, installAll } from '../claude-code/installer';
+import { IPC_CHANNELS } from '../types/ipc';
 
 /** Cap concurrent runs to prevent spawning a wall of subprocesses. */
 const MAX_CONCURRENT_RUNS = 5;
@@ -39,6 +40,7 @@ export class AgentRuntime {
   private activeRuns = new Map<string, ActiveRun>();
   private backendPort: number;
   private dataDir: string;
+  private syncChain: Promise<void> = Promise.resolve();
 
   constructor(backendPort: number, dataDir: string) {
     this.backendPort = backendPort;
@@ -84,8 +86,8 @@ export class AgentRuntime {
     }
 
     // Build the prompt: prepend recent conversation history so the
-    // subagent has multi-turn context. Cap at 10 messages / 2000 chars
-    // to keep prompts bounded.
+    // subagent has multi-turn context. Uses XML tags to prevent the LLM
+    // from treating history labels as turn-taking cues.
     let fullPrompt = content;
     if (request.recentMessages && request.recentMessages.length > 0) {
       const MAX_MSG_CHARS = 500;
@@ -95,16 +97,16 @@ export class AgentRuntime {
       const lines: string[] = [];
       let totalChars = 0;
       for (const m of recent) {
-        const tag = m.role === 'user' ? 'User' : 'Assistant';
+        const tag = m.role === 'user' ? 'human' : 'assistant';
         const text = m.content.length > MAX_MSG_CHARS
           ? m.content.slice(0, MAX_MSG_CHARS) + '...(truncated)'
           : m.content;
-        const line = `${tag}: ${text}`;
+        const line = `<${tag}>${text}</${tag}>`;
         if (totalChars + line.length > MAX_TOTAL_CHARS && lines.length > 0) break;
         lines.push(line);
         totalChars += line.length;
       }
-      fullPrompt = `Previous conversation:\n${lines.join('\n')}\n\nUser: ${content}`;
+      fullPrompt = `<conversation_history>\n${lines.join('\n')}\n</conversation_history>\n\n<instructions>\nThe above is prior conversation context for reference only. Do NOT continue the conversation or generate any text on behalf of the user. Do NOT output "User:" or simulate user messages. Only provide your single assistant response to the following request.\n</instructions>\n\n${content}`;
     }
 
     const channel = `agent:event:${runId}`;
@@ -148,6 +150,7 @@ export class AgentRuntime {
 
     runner.on('done', (messageContent: string) => {
       this.finalizeRun(runId, 'completed', messageContent);
+      this.postRunSync(webContents);
     });
 
     runner.on('error', (error: string) => {
@@ -159,6 +162,7 @@ export class AgentRuntime {
         } as RendererAgentEvent);
       }
       this.finalizeRun(runId, 'error', activeRun.accumulatedText, error);
+      this.postRunSync(webContents);
     });
 
     runner.start({
@@ -189,6 +193,19 @@ export class AgentRuntime {
   }
 
   // ── Internals ──────────────────────────────────────────────────
+
+  /** Re-sync installer after every run so skill-created experts get materialized. */
+  private postRunSync(webContents: WebContents): void {
+    // Serialize to prevent concurrent installAll calls racing on the index file
+    this.syncChain = this.syncChain
+      .then(() => installAll({ dataDir: this.dataDir, backendPort: this.backendPort }))
+      .then(() => {
+        if (!webContents.isDestroyed()) {
+          webContents.send(IPC_CHANNELS.EXPERTS_CHANGED);
+        }
+      })
+      .catch(console.error);
+  }
 
   private finalizeRun(
     runId: string,

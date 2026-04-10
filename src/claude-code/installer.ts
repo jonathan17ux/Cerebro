@@ -23,6 +23,7 @@ export interface InstallerPaths {
   claudeDir: string;
   agentsDir: string;
   skillsDir: string;
+  scriptsDir: string;
   memoryRoot: string;
   settingsPath: string;
   runtimeInfoPath: string;
@@ -36,6 +37,7 @@ export function resolvePaths(dataDir: string): InstallerPaths {
     claudeDir,
     agentsDir: path.join(claudeDir, 'agents'),
     skillsDir: path.join(claudeDir, 'skills'),
+    scriptsDir: path.join(claudeDir, 'scripts'),
     memoryRoot: path.join(dataDir, 'agent-memory'),
     settingsPath: path.join(claudeDir, 'settings.json'),
     runtimeInfoPath: path.join(claudeDir, 'cerebro-runtime.json'),
@@ -193,17 +195,23 @@ At the start of every turn, read any markdown files in that directory using \`Re
 Never store secrets, API keys, or anything the user shouldn't trust on disk.`;
 }
 
+function turnProtocol(memoryDir: string): string {
+  return `## Turn Protocol
+
+At the start of every conversation turn:
+1. **Read your soul** — \`Read\` the file \`SOUL.md\` in your memory directory. It defines your persona, working style, and quality standards. If it doesn't exist yet, create it.
+2. **Read your memory** — \`Glob\` for \`*.md\` in your memory directory and \`Read\` any files present.
+3. **Do the work** — complete the user's request.
+4. **Update memory** — if you learned something about the user or made a decision worth remembering, write or update a file in your memory directory.
+5. **Evolve your soul** — if the user gives feedback about your style, tone, or approach, update \`SOUL.md\` to reflect it.
+
+${memoryInstructions(memoryDir)}`;
+}
+
 function buildCerebroBody(memoryDir: string): string {
-  return `You are Cerebro, the user's personal AI assistant. You coordinate a team of specialist subagents (called "experts") and manage long-lived memory about the user across conversations.
+  return `You are **Cerebro**, the user's personal AI assistant.
 
-## Your role
-
-- Hold conversations with the user about anything: work, projects, planning, ideas, day-to-day questions.
-- Remember important things the user tells you so you can bring them up later.
-- Delegate to specialist experts when a task is clearly in someone else's wheelhouse — that's what the \`Agent\` tool is for.
-- Never reveal internal implementation details (file paths, tool names) unless the user asks.
-
-${memoryInstructions(memoryDir)}
+${turnProtocol(memoryDir)}
 
 ## Delegation
 
@@ -219,30 +227,183 @@ When delegating, give the subagent the relevant context — don't just forward t
 
 You have access to Cerebro-specific skills (look under \`.claude/skills/\`):
 
-- \`create-expert\` — propose and create a new expert when the user describes a recurring need that no current expert covers. Use this instead of just suggesting "you should create an expert" — actually run the skill.
+- \`create-expert\` — create a new expert when the user describes a recurring need that no current expert covers. First confirm the proposed name, description, and system prompt with the user, then invoke this skill to run the actual API call.
 - \`list-experts\` — fetch the current roster of experts from the backend if you need to know who you can delegate to.
 - \`summarize-conversation\` — used by routines.
-
-## Style
-
-Be direct and concrete. Don't pad responses with caveats or "as an AI" disclaimers. If you don't know something, say so and offer to look it up or ask the user. Use markdown sparingly — only when it actually helps readability.
 `;
 }
 
-function buildExpertBody(systemPrompt: string, memoryDir: string): string {
-  const trimmed = (systemPrompt || '').trim();
-  const userBody = trimmed.length > 0
-    ? trimmed
-    : 'You are a Cerebro specialist subagent. Help the user with tasks in your domain.';
-  return `${userBody}
+function buildExpertBody(expert: ExpertData, memoryDir: string): string {
+  const domainLine = expert.domain ? ` Domain: ${expert.domain}.` : '';
+  return `You are **${expert.name}**, a Cerebro specialist expert.${domainLine}
 
----
-
-${memoryInstructions(memoryDir)}
+${turnProtocol(memoryDir)}
 `;
 }
 
-// ── Skills ───────────────────────────────────────────────────────
+/** Write a file only if it doesn't already exist (atomic — no TOCTOU race). */
+function seedFileIfMissing(filePath: string, content: string): void {
+  try {
+    fs.writeFileSync(filePath, content, { encoding: 'utf-8', flag: 'wx' });
+  } catch {
+    // File already exists — fine, it's owned by the agent now
+  }
+}
+
+// ── Soul file ────────────────────────────────────────────────
+
+function parsePolicies(raw: Record<string, unknown> | string[] | null): string[] {
+  if (!raw) return [];
+  // Already parsed by fetchJson — handle object/array directly
+  if (Array.isArray(raw)) return raw.filter((s): s is string => typeof s === 'string');
+  if (typeof raw === 'object') {
+    return Object.entries(raw).map(([k, v]) => `${k}: ${v}`);
+  }
+  return [];
+}
+
+function buildSoulFile(expert: ExpertData): string {
+  const sections: string[] = ['# Soul\n'];
+
+  const identity = (expert.system_prompt || '').trim();
+  if (identity) {
+    sections.push(`## Identity\n\n${identity}\n`);
+  }
+
+  if (expert.domain) {
+    sections.push(`## Domain\n\n${expert.domain}\n`);
+  }
+
+  sections.push(
+    '## Working Style\n\n'
+    + '- Be direct and actionable\n'
+    + "- Adapt to the user's level of expertise\n"
+    + '- Ask clarifying questions when the request is ambiguous\n',
+  );
+
+  const policies = parsePolicies(expert.policies);
+  if (policies.length > 0) {
+    sections.push(`## Quality Standards\n\n${policies.map((p) => `- ${p}`).join('\n')}\n`);
+  }
+
+  sections.push("## Communication\n\n(Evolve this section as you learn the user's communication preferences.)\n");
+
+  return sections.join('\n');
+}
+
+function buildCerebroSoulFile(): string {
+  return buildSoulFile({
+    id: 'cerebro',
+    name: 'Cerebro',
+    slug: 'cerebro',
+    description: "The user's personal AI assistant",
+    system_prompt: 'You are Cerebro, the user\'s personal AI assistant. You coordinate a team of specialist subagents (called "experts") and manage long-lived memory about the user across conversations.',
+    domain: null,
+    policies: null,
+    is_enabled: true,
+  });
+}
+
+// ── Scripts (executable bash, guaranteed execution) ──────────────
+
+interface ScriptSpec {
+  name: string;
+  content: string;
+}
+
+function builtinScripts(): ScriptSpec[] {
+  return [
+    {
+      name: 'create-expert.sh',
+      content: `#!/usr/bin/env bash
+set -euo pipefail
+
+# Creates a Cerebro expert via the backend API.
+# Usage: bash create-expert.sh <json-file>
+#   The JSON file must contain: name, description, system_prompt
+#
+# Example:
+#   echo '{"name":"Coach","description":"Fitness coach","system_prompt":"You are..."}' > /tmp/expert.json
+#   bash create-expert.sh /tmp/expert.json
+
+RUNTIME_JSON="\${CLAUDE_PROJECT_DIR:-.}/.claude/cerebro-runtime.json"
+
+if [ ! -f "$RUNTIME_JSON" ]; then
+  echo "ERROR: Runtime info not found at $RUNTIME_JSON" >&2
+  exit 1
+fi
+
+PORT=$(jq -r .backend_port "$RUNTIME_JSON" 2>/dev/null)
+if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
+  echo "ERROR: Cannot read backend_port from $RUNTIME_JSON" >&2
+  exit 1
+fi
+
+JSON_FILE="\${1:-}"
+if [ -z "$JSON_FILE" ] || [ ! -f "$JSON_FILE" ]; then
+  echo "ERROR: Provide a path to a JSON file as the first argument" >&2
+  echo "Usage: bash create-expert.sh <json-file>" >&2
+  exit 1
+fi
+
+# Merge required defaults into the user-provided JSON
+BODY=$(jq '. + {type: "expert", source: "user", is_enabled: true}' "$JSON_FILE")
+
+RESPONSE=$(curl -s -w "\\n%{http_code}" -X POST "http://127.0.0.1:$PORT/experts" \\
+  -H "Content-Type: application/json" \\
+  -d "$BODY" 2>&1) || {
+  echo "ERROR: Cannot connect to backend at port $PORT (is the app running?)" >&2
+  exit 1
+}
+
+HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+BODY_RESPONSE=$(echo "$RESPONSE" | sed '$ d')
+
+if [ "$HTTP_CODE" -ge 200 ] 2>/dev/null && [ "$HTTP_CODE" -lt 300 ] 2>/dev/null; then
+  EXPERT_NAME=$(echo "$BODY_RESPONSE" | jq -r '.name // "unknown"')
+  EXPERT_ID=$(echo "$BODY_RESPONSE" | jq -r '.id // "unknown"')
+  echo "SUCCESS: Created expert '$EXPERT_NAME' (id: $EXPERT_ID)"
+  echo "$BODY_RESPONSE" | jq .
+else
+  echo "ERROR: Backend returned HTTP $HTTP_CODE" >&2
+  echo "$BODY_RESPONSE" >&2
+  exit 1
+fi
+`,
+    },
+    {
+      name: 'list-experts.sh',
+      content: `#!/usr/bin/env bash
+set -euo pipefail
+
+# Lists all enabled Cerebro experts from the backend API.
+# Usage: bash list-experts.sh
+
+RUNTIME_JSON="\${CLAUDE_PROJECT_DIR:-.}/.claude/cerebro-runtime.json"
+
+if [ ! -f "$RUNTIME_JSON" ]; then
+  echo "ERROR: Runtime info not found at $RUNTIME_JSON" >&2
+  exit 1
+fi
+
+PORT=$(jq -r .backend_port "$RUNTIME_JSON" 2>/dev/null)
+if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
+  echo "ERROR: Cannot read backend_port from $RUNTIME_JSON" >&2
+  exit 1
+fi
+
+curl -s "http://127.0.0.1:$PORT/experts?is_enabled=true&limit=200" | jq '.experts[] | {id, name, slug, description}'
+`,
+    },
+  ];
+}
+
+function installScript(paths: InstallerPaths, script: ScriptSpec): void {
+  const filePath = path.join(paths.scriptsDir, script.name);
+  fs.writeFileSync(filePath, script.content, { encoding: 'utf-8', mode: 0o755 });
+}
+
+// ── Skills (markdown instructions that reference scripts) ────────
 
 interface SkillSpec {
   name: string;
@@ -283,57 +444,41 @@ Keep the summary under 200 words. Plain prose, no headers.
       description: 'Fetch the current roster of Cerebro experts from the backend.',
       body: `# List experts
 
-Run this skill to discover which Cerebro experts (subagents) currently exist. This is useful when you need to decide whether to delegate and to whom.
+Run the list-experts script with the Bash tool:
 
 \`\`\`bash
-PORT=$(jq -r .backend_port "$CLAUDE_PROJECT_DIR/.claude/cerebro-runtime.json")
-curl -s "http://127.0.0.1:$PORT/experts?is_enabled=true&limit=200" | jq '.experts[] | {id, name, slug, description}'
+bash "$CLAUDE_PROJECT_DIR/.claude/scripts/list-experts.sh"
 \`\`\`
 
-Report the list back to the parent conversation in compact form (name + one-line description per expert).
+Report the list in compact form (name + one-line description per expert).
 `,
     },
     {
       name: 'create-expert',
-      description: 'Propose and create a new Cerebro expert (specialist subagent) via the backend.',
+      description: 'Create a new Cerebro expert (specialist subagent) via the backend API.',
       body: `# Create expert
 
-Use this skill when the user describes a recurring need that none of the current experts cover. **Always confirm with the user first** — show them a proposed name, description, and system prompt, get a yes, then run the script.
+This skill creates a new expert. You MUST run the command below using the **Bash** tool — the expert does not exist until the script prints SUCCESS.
 
-## Step 1: Confirm with the user
+From the conversation context, determine:
+- **name** — a friendly, human-readable display name with proper capitalization and spaces (e.g. "Fitness Coach", "Travel Planner", "Recipe Assistant"). NEVER use slugs, kebab-case, or technical identifiers.
+- **description** — one sentence explaining what the expert does
+- **system_prompt** — 2-4 paragraphs about the expert's role, tone, and behavior
 
-Draft a proposal in plain prose:
-
-- **Name**: short, memorable, e.g. "Fitness Coach"
-- **Description**: one sentence about what this expert does.
-- **System prompt**: 2-4 paragraphs describing the expert's role, tone, and how it should behave.
-
-Ask the user to approve, edit, or reject. Do not proceed until they say yes.
-
-## Step 2: Create the expert
-
-Once approved, POST to the backend. The expert will be installed as a Claude Code subagent automatically on the next sync.
+Then run this single Bash command, replacing the three placeholder strings:
 
 \`\`\`bash
-PORT=$(jq -r .backend_port "$CLAUDE_PROJECT_DIR/.claude/cerebro-runtime.json")
-
-# Replace these with the approved values
-NAME="Fitness Coach"
-DESCRIPTION="Helps the user with strength training, mobility, and recovery."
-SYSTEM_PROMPT="You are a fitness coach with deep experience in strength training..."
-
-curl -s -X POST "http://127.0.0.1:$PORT/experts" \\
-  -H "Content-Type: application/json" \\
-  -d "$(jq -n \\
-    --arg name "$NAME" \\
-    --arg description "$DESCRIPTION" \\
-    --arg system_prompt "$SYSTEM_PROMPT" \\
-    '{name: $name, description: $description, system_prompt: $system_prompt, type: "expert", source: "user", is_enabled: true}')"
+jq -n \\
+  --arg name "REPLACE_NAME" \\
+  --arg description "REPLACE_DESCRIPTION" \\
+  --arg system_prompt "REPLACE_SYSTEM_PROMPT" \\
+  '{name: $name, description: $description, system_prompt: $system_prompt}' \\
+  > "$CLAUDE_PROJECT_DIR/.claude/tmp/new-expert.json" && \\
+bash "$CLAUDE_PROJECT_DIR/.claude/scripts/create-expert.sh" "$CLAUDE_PROJECT_DIR/.claude/tmp/new-expert.json"
 \`\`\`
 
-## Step 3: Confirm and offer to delegate
-
-After creation, tell the user the expert is ready and offer to delegate the original question to them.
+If the output says **SUCCESS**, tell the user the expert is ready — it appears in the sidebar automatically.
+If the output says **ERROR**, report the error to the user.
 `,
     },
   ];
@@ -347,6 +492,8 @@ interface ExpertData {
   slug: string | null;
   description: string;
   system_prompt: string | null;
+  domain: string | null;
+  policies: Record<string, unknown> | string[] | null;
   is_enabled: boolean;
 }
 
@@ -384,6 +531,9 @@ export async function installAll(options: InstallerOptions): Promise<void> {
   fs.mkdirSync(paths.claudeDir, { recursive: true });
   fs.mkdirSync(paths.agentsDir, { recursive: true });
   fs.mkdirSync(paths.skillsDir, { recursive: true });
+  fs.mkdirSync(paths.scriptsDir, { recursive: true });
+  // Temp dir for skill-generated files (e.g. expert JSON payloads)
+  fs.mkdirSync(path.join(paths.claudeDir, 'tmp'), { recursive: true });
   fs.mkdirSync(paths.memoryRoot, { recursive: true });
 
   ensureSettings(paths);
@@ -391,7 +541,12 @@ export async function installAll(options: InstallerOptions): Promise<void> {
   // Cerebro main agent
   installCerebroMainAgent(paths);
 
-  // Skills
+  // Executable scripts (reliable — invoked via Bash tool)
+  for (const script of builtinScripts()) {
+    installScript(paths, script);
+  }
+
+  // Skills (instructions that reference the scripts above)
   for (const skill of builtinSkills()) {
     installSkill(paths, skill);
   }
@@ -658,6 +813,7 @@ function installCerebroMainAgent(paths: InstallerPaths): void {
     body: buildCerebroBody(memoryDir),
   };
   fs.writeFileSync(path.join(paths.agentsDir, 'cerebro.md'), renderAgentFile(file), 'utf-8');
+  seedFileIfMissing(path.join(memoryDir, 'SOUL.md'), buildCerebroSoulFile());
 }
 
 function writeExpertAgent(
@@ -671,13 +827,14 @@ function writeExpertAgent(
     name: agentName,
     description: expert.description || expert.name,
     tools: EXPERT_TOOLS,
-    body: buildExpertBody(expert.system_prompt || '', memoryDir),
+    body: buildExpertBody(expert, memoryDir),
   };
   fs.writeFileSync(
     path.join(paths.agentsDir, `${agentName}.md`),
     renderAgentFile(file),
     'utf-8',
   );
+  seedFileIfMissing(path.join(memoryDir, 'SOUL.md'), buildSoulFile(expert));
 }
 
 function installSkill(paths: InstallerPaths, skill: SkillSpec): void {
