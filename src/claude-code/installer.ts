@@ -569,7 +569,7 @@ jq -n \\
 bash "$CLAUDE_PROJECT_DIR/.claude/scripts/create-expert.sh" "$CLAUDE_PROJECT_DIR/.claude/tmp/new-expert.json"
 \`\`\`
 
-If the output says **SUCCESS**, tell the user the expert is ready — it appears in the sidebar automatically. Mention which skills were auto-assigned based on the domain (e.g. "I've created your Running Coach with all 6 fitness skills pre-loaded").
+If the output says **SUCCESS**, tell the user the expert is ready — it appears in the sidebar automatically. If you set a domain, mention that matching skills from the library were auto-assigned.
 If the output says **ERROR**, report the error to the user.
 `,
     },

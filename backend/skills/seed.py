@@ -1110,61 +1110,45 @@ def seed_builtin_skills(db: Session) -> None:
     db.commit()
 
 
-def assign_default_skills(db: Session, expert_id: str) -> None:
-    """Assign all default skills to a specific expert."""
-    default_skills = db.query(Skill).filter(
-        Skill.is_default == True,  # noqa: E712
-        Skill.is_enabled == True,  # noqa: E712
-    ).all()
-    if not default_skills:
+def _assign_skills(db: Session, expert_id: str, skills: list[Skill]) -> None:
+    """Assign a list of skills to an expert, skipping any already assigned."""
+    if not skills:
         return
-
-    # Batch-check existing assignments (single query instead of N)
-    default_ids = [s.id for s in default_skills]
-    already_assigned = set(
-        row[0] for row in
-        db.query(ExpertSkill.skill_id)
-        .filter(ExpertSkill.expert_id == expert_id, ExpertSkill.skill_id.in_(default_ids))
-        .all()
-    )
-
-    for skill in default_skills:
-        if skill.id not in already_assigned:
-            db.add(ExpertSkill(
-                id=_uuid_hex(),
-                expert_id=expert_id,
-                skill_id=skill.id,
-            ))
-
-
-def assign_category_skills(db: Session, expert_id: str, domain: str | None) -> None:
-    """Auto-assign non-default skills whose category matches the expert's domain."""
-    if not domain:
-        return
-
-    category_skills = db.query(Skill).filter(
-        Skill.category == domain,
-        Skill.is_enabled == True,  # noqa: E712
-        Skill.is_default == False,  # noqa: E712
-    ).all()
-    if not category_skills:
-        return
-
-    skill_ids = [s.id for s in category_skills]
+    skill_ids = [s.id for s in skills]
     already_assigned = set(
         row[0] for row in
         db.query(ExpertSkill.skill_id)
         .filter(ExpertSkill.expert_id == expert_id, ExpertSkill.skill_id.in_(skill_ids))
         .all()
     )
-
-    for skill in category_skills:
+    for skill in skills:
         if skill.id not in already_assigned:
             db.add(ExpertSkill(
                 id=_uuid_hex(),
                 expert_id=expert_id,
                 skill_id=skill.id,
             ))
+
+
+def assign_default_skills(db: Session, expert_id: str) -> None:
+    """Assign all default skills to a specific expert."""
+    skills = db.query(Skill).filter(
+        Skill.is_default == True,  # noqa: E712
+        Skill.is_enabled == True,  # noqa: E712
+    ).all()
+    _assign_skills(db, expert_id, skills)
+
+
+def assign_category_skills(db: Session, expert_id: str, domain: str | None) -> None:
+    """Auto-assign non-default skills whose category matches the expert's domain."""
+    if not domain:
+        return
+    skills = db.query(Skill).filter(
+        Skill.category == domain,
+        Skill.is_enabled == True,  # noqa: E712
+        Skill.is_default == False,  # noqa: E712
+    ).all()
+    _assign_skills(db, expert_id, skills)
 
 
 def _assign_defaults_to_unassigned_experts(db: Session) -> None:
@@ -1176,7 +1160,6 @@ def _assign_defaults_to_unassigned_experts(db: Session) -> None:
     if not default_skills:
         return
 
-    # Find experts with no skill assignments
     experts_with_skills = (
         db.query(ExpertSkill.expert_id)
         .group_by(ExpertSkill.expert_id)
@@ -1189,9 +1172,4 @@ def _assign_defaults_to_unassigned_experts(db: Session) -> None:
     )
 
     for expert in unassigned_experts:
-        for skill in default_skills:
-            db.add(ExpertSkill(
-                id=_uuid_hex(),
-                expert_id=expert.id,
-                skill_id=skill.id,
-            ))
+        _assign_skills(db, expert.id, default_skills)
