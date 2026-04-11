@@ -50,6 +50,7 @@ export interface CreateExpertInput {
   teamMembers?: Array<{ expertId: string; role: string; order: number }>;
   strategy?: string;
   coordinatorPrompt?: string;
+  avatarUrl?: string | null;
 }
 
 // ── API response types (snake_case) ────────────────────────────
@@ -129,6 +130,7 @@ function toApiBody(input: CreateExpertInput): Record<string, unknown> {
   }
   if (input.strategy) body.strategy = input.strategy;
   if (input.coordinatorPrompt) body.coordinator_prompt = input.coordinatorPrompt;
+  if (input.avatarUrl !== undefined) body.avatar_url = input.avatarUrl;
   return body;
 }
 

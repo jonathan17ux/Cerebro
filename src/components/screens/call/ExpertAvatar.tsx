@@ -1,5 +1,8 @@
+import { useRef } from 'react';
 import { Bot } from 'lucide-react';
 import type { VoiceSessionState } from '../../../voice/types';
+import { getAvatar } from '../../../constants/avatars';
+import { useAmplitudePulse } from '../../../hooks/useAmplitudePulse';
 
 const DOMAIN_COLORS: Record<string, string> = {
   productivity: '#3b82f6',
@@ -16,10 +19,17 @@ interface ExpertAvatarProps {
   domain: string | null;
   name: string;
   sessionState: VoiceSessionState;
+  avatarUrl: string | null;
+  analyser: AnalyserNode | null;
 }
 
-export default function ExpertAvatar({ domain, name, sessionState }: ExpertAvatarProps) {
+export default function ExpertAvatar({ domain, name, sessionState, avatarUrl, analyser }: ExpertAvatarProps) {
   const color = (domain && DOMAIN_COLORS[domain.toLowerCase()]) || DEFAULT_COLOR;
+  const avatar = getAvatar(avatarUrl);
+  const pulseRef = useRef<HTMLDivElement>(null);
+
+  const pulseActive = sessionState === 'speaking' ? analyser : null;
+  useAmplitudePulse(pulseActive, pulseRef, 0.12);
 
   const animClass =
     sessionState === 'speaking'
@@ -30,7 +40,6 @@ export default function ExpertAvatar({ domain, name, sessionState }: ExpertAvata
 
   return (
     <div className="flex flex-col items-center gap-4">
-      {/* Glow ring container */}
       <div
         className={`relative w-40 h-40 rounded-full flex items-center justify-center ${animClass}`}
         style={{
@@ -39,10 +48,25 @@ export default function ExpertAvatar({ domain, name, sessionState }: ExpertAvata
           boxShadow: `0 0 30px ${color}50, 0 0 60px ${color}20, inset 0 0 30px ${color}10`,
         }}
       >
-        <Bot size={56} style={{ color }} />
+        <div
+          ref={pulseRef}
+          className="flex items-center justify-center transition-transform duration-75 ease-out will-change-transform"
+        >
+          {avatar ? (
+            <img
+              src={avatar.src}
+              alt={avatar.label}
+              width={120}
+              height={120}
+              className="object-contain pointer-events-none select-none"
+              draggable={false}
+            />
+          ) : (
+            <Bot size={56} style={{ color }} />
+          )}
+        </div>
       </div>
 
-      {/* Name and status */}
       <div className="text-center">
         <h2 className="text-lg font-semibold text-text-primary">{name}</h2>
         {domain && (

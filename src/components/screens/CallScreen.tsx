@@ -244,6 +244,8 @@ export default function CallScreen() {
             domain={expert?.domain ?? null}
             name={expert?.name ?? 'Expert'}
             sessionState={sessionState}
+            avatarUrl={expert?.avatarUrl ?? null}
+            analyser={speakerAnalyser}
           />
         )}
       </div>

@@ -1,6 +1,7 @@
 import { Brain, Bot, Users, Pin } from 'lucide-react';
 import clsx from 'clsx';
 import type { Expert } from '../../../context/ExpertContext';
+import { getAvatar } from '../../../constants/avatars';
 
 // ── Domain glow colors ─────────────────────────────────────────
 
@@ -82,6 +83,8 @@ export default function ExpertNode({
   const isEnabled = expert?.isEnabled ?? true;
   const boxSize = isCerebro ? 80 : 64;
   const iconSize = isCerebro ? 36 : 26;
+  const avatar = isCerebro ? null : getAvatar(expert?.avatarUrl);
+  const avatarSize = isCerebro ? 64 : 52;
 
   return (
     <div
@@ -117,6 +120,15 @@ export default function ExpertNode({
       >
         {isCerebro ? (
           <Brain size={iconSize} style={{ color: glow.color }} />
+        ) : avatar ? (
+          <img
+            src={avatar.src}
+            alt={avatar.label}
+            width={avatarSize}
+            height={avatarSize}
+            className="object-contain pointer-events-none select-none"
+            draggable={false}
+          />
         ) : expert?.type === 'team' ? (
           <Users size={iconSize} style={{ color: glow.color }} />
         ) : (

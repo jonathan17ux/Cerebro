@@ -5,6 +5,7 @@ import { useVoice } from '../../../context/VoiceContext';
 import type { Expert } from '../../../context/ExpertContext';
 import ExpertMemoryTab from '../../experts/ExpertMemoryTab';
 import ExpertSkillsSection from './ExpertSkillsSection';
+import AvatarPicker from './AvatarPicker';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -266,6 +267,16 @@ export default function ExpertDetailPanel({
                     }
                     rows={3}
                     className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide mb-1">
+                    Avatar
+                  </label>
+                  <AvatarPicker
+                    value={expert.avatarUrl}
+                    onChange={(id) => saveField('avatar_url', id)}
                   />
                 </div>
               </div>

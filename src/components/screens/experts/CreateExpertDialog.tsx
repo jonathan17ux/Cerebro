@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, User, Users, Check } from 'lucide-react';
 import clsx from 'clsx';
 import type { Expert, ExpertType, CreateExpertInput } from '../../../context/ExpertContext';
+import AvatarPicker from './AvatarPicker';
 
 const DOMAINS = ['', 'productivity', 'health', 'finance', 'creative', 'engineering', 'research'];
 
@@ -22,6 +23,7 @@ export default function CreateExpertDialog({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [domain, setDomain] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -35,6 +37,7 @@ export default function CreateExpertDialog({
       setName('');
       setDescription('');
       setDomain('');
+      setAvatarUrl(null);
       setSelectedMembers([]);
       setTimeout(() => nameRef.current?.focus(), 50);
     }
@@ -64,6 +67,7 @@ export default function CreateExpertDialog({
         description: description.trim(),
         domain: domain || undefined,
         type,
+        avatarUrl,
       };
       if (type === 'team') {
         input.teamMembers = selectedMembers.map((id, i) => ({
@@ -187,6 +191,14 @@ export default function CreateExpertDialog({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Avatar */}
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Avatar <span className="text-text-tertiary font-normal">(optional)</span>
+            </label>
+            <AvatarPicker value={avatarUrl} onChange={setAvatarUrl} />
           </div>
 
           {/* Team Members (only for team type) */}
