@@ -196,6 +196,16 @@ class TTSEngine:
             len(prompt_tokens), speaker, repr(text[:100]),
         )
 
+        # Force a real reset: llama-cpp-python's generate(reset=True) has a
+        # KV-cache prefix-match optimization (llama.py:882-899) that disables
+        # reset whenever the new prompt shares ANY prefix with self._input_ids
+        # from the previous call. Since every Orpheus TTS prompt starts with
+        # the same tokens (<|audio|>, voice name, colon), the optimization
+        # always triggers and reuses residual state — causing extra phantom
+        # words at the start of each utterance. Zeroing n_tokens first makes
+        # the `if reset and self.n_tokens > 0` guard fail, bypassing it.
+        self._model.n_tokens = 0
+
         for token_id in self._model.generate(
             prompt_tokens,
             top_k=40,
