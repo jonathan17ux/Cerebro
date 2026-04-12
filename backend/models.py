@@ -2,7 +2,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -260,3 +260,69 @@ class ExecutionEventRecord(Base):
     step_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     payload_json: Mapped[str] = mapped_column(Text)
     timestamp: Mapped[datetime] = mapped_column(DateTime, index=True)
+
+
+class Task(Base):
+    __tablename__ = "tasks"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid_hex)
+    title: Mapped[str] = mapped_column(String(255))
+    goal: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="pending", index=True)
+    # pending | clarifying | awaiting_clarification | planning | running
+    # | completed | failed | cancelled
+
+    expert_hint_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("experts.id", ondelete="SET NULL"), nullable=True
+    )
+    template_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
+    run_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("run_records.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    conversation_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True
+    )
+
+    plan_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    deliverable_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    deliverable_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    deliverable_kind: Mapped[str] = mapped_column(String(20), default="markdown")
+    # "markdown" | "code_app" | "mixed"
+
+    workspace_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    run_info_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    clarifications_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    skip_clarification: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    max_turns: Mapped[int] = mapped_column(Integer, default=60)
+    max_phases: Mapped[int] = mapped_column(Integer, default=6)
+
+    created_expert_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class TaskEvent(Base):
+    __tablename__ = "task_events"
+    __table_args__ = (
+        UniqueConstraint("task_id", "seq", name="uq_task_event_seq"),
+        Index("ix_task_events_task_id_seq", "task_id", "seq"),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid_hex)
+    task_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("tasks.id", ondelete="CASCADE"), index=True
+    )
+    seq: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(30))
+    # text_delta | tool_start | tool_end | phase_start | phase_end | error | system
+    payload_json: Mapped[str] = mapped_column(Text)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)

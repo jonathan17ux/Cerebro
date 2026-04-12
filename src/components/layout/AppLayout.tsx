@@ -11,6 +11,7 @@ import ApprovalsScreen from '../screens/ApprovalsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import SkillsLibraryScreen from '../screens/SkillsLibraryScreen';
 import CallScreen from '../screens/CallScreen';
+import TasksScreen from '../screens/TasksScreen';
 import PlaceholderScreen from '../screens/PlaceholderScreen';
 import AlertModal from '../ui/AlertModal';
 
@@ -38,6 +39,9 @@ export default function AppLayout() {
       ) : (
         <WelcomeView onSend={sendMessage} />
       );
+    }
+    if (activeScreen === 'tasks') {
+      return <TasksScreen />;
     }
     if (activeScreen === 'experts') {
       return <ExpertsScreen />;

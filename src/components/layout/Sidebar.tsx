@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import {
   MessageSquare,
+  Target,
   Users,
   Zap,
   Activity,
@@ -17,6 +18,7 @@ import {
 import clsx from 'clsx';
 import { useChat } from '../../context/ChatContext';
 import { useApprovals } from '../../context/ApprovalContext';
+import { useTasks } from '../../context/TaskContext';
 import type { Conversation, Screen } from '../../types/chat';
 
 /* ── Nav structure: grouped by function ───────────────────────── */
@@ -31,6 +33,7 @@ interface NavItem {
 // Primary — daily-use surfaces
 const NAV_PRIMARY: NavItem[] = [
   { id: 'chat', label: 'Chat', icon: MessageSquare },
+  { id: 'tasks', label: 'Tasks', icon: Target },
   { id: 'experts', label: 'Experts', icon: Users },
   { id: 'routines', label: 'Routines', icon: Zap },
 ];
@@ -188,10 +191,20 @@ export default function Sidebar() {
     deleteConversation,
   } = useChat();
   const { pendingCount } = useApprovals();
+  const { runningCount } = useTasks();
 
   const [collapsed, setCollapsed] = useState(false);
   const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
   const grouped = useMemo(() => groupByTime(conversations), [conversations]);
+
+  const navPrimary = useMemo<NavItem[]>(() =>
+    NAV_PRIMARY.map((item) =>
+      item.id === 'tasks' && runningCount > 0
+        ? { ...item, badge: runningCount }
+        : item,
+    ),
+    [runningCount],
+  );
 
   const navOversight = useMemo<NavItem[]>(() =>
     NAV_OVERSIGHT_BASE.map((item) =>
@@ -279,9 +292,9 @@ export default function Sidebar() {
 
       {/* ── Navigation ───────────────────────────────────────── */}
       <nav className="px-2.5">
-        {/* Primary: Chat, Experts, Routines */}
+        {/* Primary: Chat, Tasks, Experts, Routines */}
         <NavGroup
-          items={NAV_PRIMARY}
+          items={navPrimary}
           activeScreen={activeScreen}
           collapsed={collapsed}
           onNavClick={handleNavClick}

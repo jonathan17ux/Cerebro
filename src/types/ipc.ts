@@ -108,6 +108,17 @@ export interface AgentRunRequest {
   recentMessages?: MessageSnapshot[];
   routineProposals?: ProposalSnapshot[];
   expertProposals?: ProposalSnapshot[];
+
+  // Task mode
+  runType?: 'chat' | 'task';
+  taskPhase?: 'clarify' | 'execute';
+  maxTurns?: number;
+  maxPhases?: number;
+  maxClarifyQuestions?: number;
+  runIdOverride?: string;
+  workspacePath?: string;
+  clarificationAnswers?: string;
+  model?: string;
 }
 
 export type RendererAgentEvent =
@@ -116,6 +127,7 @@ export type RendererAgentEvent =
   | { type: 'text_delta'; delta: string }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_end'; toolCallId: string; toolName: string; result: string; isError: boolean }
+  | { type: 'system'; message: string; subtype?: string }
   | { type: 'done'; runId: string; messageContent: string }
   | { type: 'error'; runId: string; error: string };
 

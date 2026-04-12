@@ -231,6 +231,18 @@ You have access to Cerebro-specific skills (look under \`${skillsDir}/\`):
 - \`create-skill\` — create a new custom skill when the user wants to package a reusable capability for their experts. Confirm the name, description, and instructions with the user first.
 - \`list-experts\` — fetch the current roster of experts from the backend if you need to know who you can delegate to.
 - \`summarize-conversation\` — used by routines.
+
+## Task Mode
+
+When a prompt arrives wrapped in \`<task_clarify>\` or \`<task_execute>\` you are running an autonomous task. Follow the envelope's protocol strictly:
+
+1. Never ask the user for clarification, confirmation, or approval.
+2. Read the expert roster first via list-experts.
+3. Emit a \`<plan>\` block, then for each phase emit \`<phase>\` markers around your delegation, then exactly one \`<deliverable>\` block at the end.
+4. For code_app/mixed deliverables, emit a \`<run_info>\` block after the deliverable.
+5. In task mode, the create-expert skill runs autonomously — do NOT stop to confirm with the user. Invent sensible fields and run the bash script directly. After SUCCESS, run \`bash "$CLAUDE_PROJECT_DIR/.claude/scripts/rematerialize-experts.sh"\` so the new expert is immediately invocable.
+6. Delegation depth is capped at 2 levels from you.
+7. Your working directory is the task workspace — write all files there.
 `;
 }
 
@@ -448,6 +460,47 @@ if [ "$HTTP_CODE" -ge 200 ] 2>/dev/null && [ "$HTTP_CODE" -lt 300 ] 2>/dev/null;
   SKILL_ID=$(echo "$BODY_RESPONSE" | jq -r '.id // "unknown"')
   echo "SUCCESS: Created skill '$SKILL_NAME' (id: $SKILL_ID)"
   echo "$BODY_RESPONSE" | jq .
+else
+  echo "ERROR: Backend returned HTTP $HTTP_CODE" >&2
+  echo "$BODY_RESPONSE" >&2
+  exit 1
+fi
+`,
+    },
+    {
+      name: 'rematerialize-experts.sh',
+      content: `#!/usr/bin/env bash
+set -euo pipefail
+
+# Re-materializes agent files for all currently enabled experts so they
+# are immediately invocable via the Agent tool in the current subprocess.
+# Used after create-expert in task mode.
+
+RUNTIME_JSON="\${CLAUDE_PROJECT_DIR:-.}/.claude/cerebro-runtime.json"
+
+if [ ! -f "$RUNTIME_JSON" ]; then
+  echo "ERROR: Runtime info not found at $RUNTIME_JSON" >&2
+  exit 1
+fi
+
+PORT=$(jq -r .backend_port "$RUNTIME_JSON" 2>/dev/null)
+if [ -z "$PORT" ] || [ "$PORT" = "null" ]; then
+  echo "ERROR: Cannot read backend_port from $RUNTIME_JSON" >&2
+  exit 1
+fi
+
+RESPONSE=$(curl -s -w "\\n%{http_code}" -X POST "http://127.0.0.1:$PORT/sync/agent-files" \\
+  -H "Content-Type: application/json" 2>&1) || {
+  echo "ERROR: Cannot connect to backend at port $PORT" >&2
+  exit 1
+}
+
+HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+BODY_RESPONSE=$(echo "$RESPONSE" | sed '$ d')
+
+if [ "$HTTP_CODE" -ge 200 ] 2>/dev/null && [ "$HTTP_CODE" -lt 300 ] 2>/dev/null; then
+  COUNT=$(echo "$BODY_RESPONSE" | jq -r '.count // 0')
+  echo "SUCCESS: Rematerialized $COUNT expert agent files."
 else
   echo "ERROR: Backend returned HTTP $HTTP_CODE" >&2
   echo "$BODY_RESPONSE" >&2

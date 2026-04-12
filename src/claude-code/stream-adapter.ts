@@ -27,6 +27,10 @@ export interface ClaudeCodeRunOptions {
    * .claude/skills/, and .claude/settings.json.
    */
   cwd: string;
+  /** Override --max-turns (default 15). */
+  maxTurns?: number;
+  /** Override the model (e.g. "sonnet", "opus", "claude-sonnet-4-6"). */
+  model?: string;
 }
 
 /**
@@ -62,10 +66,14 @@ export class ClaudeCodeRunner extends EventEmitter {
       '--agent', agentName,
       '--output-format', 'stream-json',
       '--verbose',
-      '--max-turns', '15',
+      '--max-turns', String(options.maxTurns ?? 15),
       '--dangerously-skip-permissions',
       '--append-system-prompt', 'CRITICAL: Never generate text on behalf of the user. Never output "User:" or simulate user messages. Your response ends when you have answered the request.',
     ];
+
+    if (options.model) {
+      args.push('--model', options.model);
+    }
 
     // Build env: inherit process.env but strip CLAUDECODE to avoid nested session error
     const env = { ...process.env } as Record<string, string>;
@@ -257,14 +265,31 @@ export class ClaudeCodeRunner extends EventEmitter {
         } as RendererAgentEvent);
       }
     } else if (type === 'result') {
-      // Final result event
+      // Final result event — ensure we have the final text
       if (parsed.result) {
-        // result contains the final text; we may have already accumulated it via deltas
-        // Don't double-emit — just ensure we have the final text
         if (!this.accumulatedText && typeof parsed.result === 'string') {
           this.accumulatedText = parsed.result;
         }
       }
+      this.emit('event', {
+        type: 'system',
+        message: `Run completed (${parsed.num_turns ?? '?'} turns, ${parsed.duration_ms ? Math.round(parsed.duration_ms / 1000) + 's' : '?'})`,
+        subtype: 'result',
+      } as RendererAgentEvent);
+    } else if (type === 'system') {
+      // System events: init, config, etc.
+      const msg = parsed.message || parsed.subtype || 'system';
+      this.emit('event', {
+        type: 'system',
+        message: typeof msg === 'string' ? msg : JSON.stringify(msg),
+        subtype: parsed.subtype,
+      } as RendererAgentEvent);
+    } else if (type === 'rate_limit_event') {
+      this.emit('event', {
+        type: 'system',
+        message: `Rate limit: retry after ${parsed.retry_after ?? '?'}s`,
+        subtype: 'rate_limit',
+      } as RendererAgentEvent);
     } else if (type === 'tool_result' || type === 'tool_use_result') {
       // Top-level tool result (forward-compatibility path)
       const toolCallId = parsed.tool_use_id || parsed.id || '';
@@ -278,7 +303,15 @@ export class ClaudeCodeRunner extends EventEmitter {
         }
       }
     } else if (type) {
-      console.debug(`[ClaudeCode:stream] unhandled event type: ${type}`);
+      // Skip high-frequency noise events that add no user-visible information
+      const SKIP = new Set(['content_block_start', 'content_block_stop', 'message_start', 'message_stop', 'ping', 'message_delta']);
+      if (!SKIP.has(type)) {
+        this.emit('event', {
+          type: 'system',
+          message: type,
+          subtype: type,
+        } as RendererAgentEvent);
+      }
     }
   }
 }

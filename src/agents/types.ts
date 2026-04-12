@@ -39,6 +39,26 @@ export interface AgentRunRequest {
   routineProposals?: ProposalSnapshot[];
   /** Expert proposals from earlier messages in this conversation. */
   expertProposals?: ExpertProposalSnapshot[];
+
+  // ── Task mode fields ──────────────────────────────────────────
+  /** 'chat' (default) or 'task'. */
+  runType?: 'chat' | 'task';
+  /** Which task subprocess phase: 'clarify' (short question pass) or 'execute' (full run). */
+  taskPhase?: 'clarify' | 'execute';
+  /** Override --max-turns. Default: 15 (chat), 5 (clarify), 60 (execute). */
+  maxTurns?: number;
+  /** Maximum plan phases (injected into the execute envelope). Default 6. */
+  maxPhases?: number;
+  /** Maximum clarification questions. Default 5. */
+  maxClarifyQuestions?: number;
+  /** Use a pre-minted run_records row instead of creating one. */
+  runIdOverride?: string;
+  /** Task workspace CWD for execute phase (overrides dataDir). */
+  workspacePath?: string;
+  /** Pre-formatted answers block from the clarification pass. */
+  clarificationAnswers?: string;
+  /** Model override (e.g. "sonnet", "opus", "claude-sonnet-4-6"). */
+  model?: string;
 }
 
 // ── Events sent to renderer ─────────────────────────────────────
@@ -49,6 +69,7 @@ export type RendererAgentEvent =
   | { type: 'text_delta'; delta: string }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_end'; toolCallId: string; toolName: string; result: string; isError: boolean }
+  | { type: 'system'; message: string; subtype?: string }
   | { type: 'done'; runId: string; messageContent: string }
   | { type: 'error'; runId: string; error: string };
 

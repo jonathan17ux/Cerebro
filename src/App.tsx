@@ -6,6 +6,7 @@ import { ExpertProvider } from './context/ExpertContext';
 import { SkillProvider } from './context/SkillContext';
 import { RoutineProvider } from './context/RoutineContext';
 import { ApprovalProvider } from './context/ApprovalContext';
+import { TaskProvider } from './context/TaskContext';
 import { ToastProvider } from './context/ToastContext';
 import { VoiceProvider } from './context/VoiceContext';
 import { SandboxProvider } from './context/SandboxContext';
@@ -22,11 +23,13 @@ function App() {
               <SkillProvider>
               <RoutineProvider>
                 <ApprovalProvider>
-                  <ChatProvider>
-                    <VoiceProvider>
-                      <AppLayout />
-                    </VoiceProvider>
-                  </ChatProvider>
+                  <TaskProvider>
+                    <ChatProvider>
+                      <VoiceProvider>
+                        <AppLayout />
+                      </VoiceProvider>
+                    </ChatProvider>
+                  </TaskProvider>
                 </ApprovalProvider>
               </RoutineProvider>
               </SkillProvider>

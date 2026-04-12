@@ -26,6 +26,8 @@ from scripts.router import router as scripts_router
 from skills.router import skills_router, expert_skills_router
 from voice.router import router as voice_router, init_voice_singletons
 from sandbox.router import router as sandbox_router
+from tasks.router import router as tasks_router
+from sync.router import router as sync_router
 
 
 @asynccontextmanager
@@ -73,6 +75,8 @@ app.include_router(skills_router)
 app.include_router(expert_skills_router)
 app.include_router(voice_router, prefix="/voice")
 app.include_router(sandbox_router, prefix="/sandbox")
+app.include_router(tasks_router, prefix="/tasks")
+app.include_router(sync_router, prefix="/sync")
 
 
 @app.get("/health")

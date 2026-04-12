@@ -11,7 +11,7 @@ import RunDetailPanel from './activity/RunDetailPanel';
 // ── Filter definitions ─────────────────────────────────────────
 
 const STATUS_FILTERS = ['all', 'running', 'paused', 'completed', 'failed', 'cancelled'] as const;
-const TYPE_FILTERS = ['all', 'routine', 'preview', 'ad_hoc', 'orchestration'] as const;
+const TYPE_FILTERS = ['all', 'routine', 'preview', 'ad_hoc', 'orchestration', 'task'] as const;
 const TRIGGER_FILTERS = ['all', 'manual', 'scheduled', 'chat', 'webhook'] as const;
 
 type StatusFilter = (typeof STATUS_FILTERS)[number];
@@ -29,6 +29,7 @@ const FILTER_LABELS: Record<string, string> = {
   preview: 'Preview',
   ad_hoc: 'Ad-Hoc',
   orchestration: 'Orchestration',
+  task: 'Task',
   manual: 'Manual',
   scheduled: 'Scheduled',
   chat: 'Chat',
