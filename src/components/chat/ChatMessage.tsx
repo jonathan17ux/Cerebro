@@ -8,6 +8,8 @@ import RoutineProposalCard from './RoutineProposalCard';
 import ExpertProposalCard from './ExpertProposalCard';
 import TeamProposalCard from './TeamProposalCard';
 import TeamRunCard from './TeamRunCard';
+import AttachmentChip from './AttachmentChip';
+import type { AttachmentInfo } from '../../types/attachments';
 
 interface ChatMessageProps {
   message: Message;
@@ -17,10 +19,37 @@ function formatTime(date: Date): string {
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+function parseFileRefs(content: string): { attachments: AttachmentInfo[]; text: string } {
+  const lines = content.split('\n');
+  const attachments: AttachmentInfo[] = [];
+  let i = 0;
+
+  for (; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith('@/') || line.startsWith('@~')) {
+      const filePath = line.slice(1);
+      const fileName = filePath.split('/').pop() || filePath;
+      const ext = fileName.includes('.') ? fileName.split('.').pop()!.toLowerCase() : '';
+      attachments.push({ id: filePath, filePath, fileName, fileSize: 0, extension: ext });
+    } else if (line === '') {
+      continue;
+    } else {
+      break;
+    }
+  }
+
+  return { attachments, text: lines.slice(i).join('\n').trim() };
+}
+
 export default function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === 'user';
   const hasToolCalls = message.toolCalls && message.toolCalls.length > 0;
-  const hasContent = message.content.length > 0;
+
+  const { attachments: fileRefs, text: displayContent } = isUser
+    ? parseFileRefs(message.content)
+    : { attachments: [], text: message.content };
+
+  const hasContent = displayContent.length > 0;
 
   return (
     <div className="animate-fade-in">
@@ -92,8 +121,17 @@ export default function ChatMessage({ message }: ChatMessageProps) {
       {/* Thinking indicator */}
       {!isUser && message.isThinking && !hasContent && <ThinkingIndicator />}
 
+      {/* File attachments for user messages */}
+      {isUser && fileRefs.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {fileRefs.map((att) => (
+            <AttachmentChip key={att.id} attachment={att} />
+          ))}
+        </div>
+      )}
+
       {/* Message content */}
-      {(hasContent || isUser) && (
+      {hasContent && (
         <div
           className={clsx(
             'rounded-xl px-4 py-3',
@@ -101,7 +139,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
           )}
         >
           {isUser ? (
-            <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+            <p className="text-sm whitespace-pre-wrap leading-relaxed">{displayContent}</p>
           ) : (
             <div className={clsx(message.isStreaming && 'streaming-cursor')}>
               <MarkdownContent content={message.content} />

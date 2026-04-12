@@ -243,6 +243,7 @@ export interface CerebroAPI {
   startStream(request: StreamRequest): Promise<string>;
   cancelStream(streamId: string): Promise<void>;
   onStream(streamId: string, callback: (event: StreamEvent) => void): () => void;
+  getPathForFile(file: File): string;
   agent: AgentAPI;
   engine: EngineAPI;
   scheduler: SchedulerAPI;

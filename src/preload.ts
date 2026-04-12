@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { IPC_CHANNELS } from './types/ipc';
 import type {
   BackendRequest,
@@ -24,6 +24,10 @@ const api: CerebroAPI = {
 
   getStatus(): Promise<BackendStatus> {
     return ipcRenderer.invoke(IPC_CHANNELS.BACKEND_STATUS);
+  },
+
+  getPathForFile(file: File): string {
+    return webUtils.getPathForFile(file);
   },
 
   startStream(request: StreamRequest): Promise<string> {
