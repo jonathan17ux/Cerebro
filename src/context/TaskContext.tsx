@@ -642,54 +642,102 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     if (!res.ok) return;
     const task = res.data;
 
-    // If the task is still running and we have a run_id, try to subscribe
-    if (task.status === 'running' || task.status === 'clarifying') {
-      if (task.run_id) {
-        const parser = new TaskStreamParser(
-          task.status === 'clarifying' ? 'clarify' : 'execute',
-        );
-        parserRef.current = parser;
+    // Load persisted events so logs survive navigation (works for both
+    // running and completed tasks)
+    const eventsRes = await window.cerebro.invoke<Array<{ seq: number; kind: string; payload_json: string }>>({
+      method: 'GET',
+      path: `/tasks/${id}/events?limit=5000`,
+    });
+    const logEntries: TaskLogEntry[] = [];
+    let maxSeq = 0;
+    if (eventsRes.ok && Array.isArray(eventsRes.data)) {
+      for (const evt of eventsRes.data) {
+        if (evt.seq > maxSeq) maxSeq = evt.seq;
+        try {
+          const p = JSON.parse(evt.payload_json);
+          if (evt.kind === 'text_delta') logEntries.push({ kind: 'text_delta', text: p.delta ?? '', phaseId: p.phaseId ?? null });
+          else if (evt.kind === 'tool_start') logEntries.push({ kind: 'tool_start', toolCallId: p.toolCallId, toolName: p.toolName, args: p.args });
+          else if (evt.kind === 'tool_end') logEntries.push({ kind: 'tool_end', toolCallId: p.toolCallId, toolName: p.toolName, result: p.result, isError: p.isError });
+          else if (evt.kind === 'phase_start') logEntries.push({ kind: 'phase_start', phaseId: p.phaseId ?? '', name: p.name ?? '' });
+          else if (evt.kind === 'phase_end') logEntries.push({ kind: 'phase_end', phaseId: p.phaseId ?? '' });
+          else if (evt.kind === 'error') logEntries.push({ kind: 'error', message: p.error ?? 'Unknown error' });
+          else if (evt.kind === 'system') logEntries.push({ kind: 'system', message: p.message ?? 'system event' });
+        } catch { /* skip malformed */ }
+      }
+    }
 
+    // For running tasks: subscribe for new live events on top of history
+    if ((task.status === 'running' || task.status === 'clarifying') && task.run_id) {
+      const parser = new TaskStreamParser(
+        task.status === 'clarifying' ? 'clarify' : 'execute',
+      );
+      parserRef.current = parser;
+
+      const live: LiveTaskState = {
+        taskId: task.id,
+        runId: task.run_id,
+        phase: task.status === 'clarifying' ? 'clarify' : 'execute',
+        plan: task.plan ?? null,
+        deliverableKind: task.deliverable_kind ?? null,
+        phases: {},
+        activePhaseId: null,
+        textAccumulated: '',
+        logEntries,
+        logSeqCounter: maxSeq + 1,
+        turnsUsed: 0,
+        readySeen: false,
+        deliverableMarkdown: null,
+        deliverableTitle: null,
+        runInfo: null,
+        model: undefined,
+        finalized: false,
+      };
+
+      if (task.plan?.phases) {
+        for (const phase of task.plan.phases) {
+          live.phases[phase.id] = { status: phase.status, name: phase.name, summary: phase.summary };
+        }
+      }
+
+      liveTaskRef.current = live;
+      setLiveTask(live);
+
+      const unsub = window.cerebro.agent.onEvent(task.run_id, handleStreamEvent);
+      unsubRef.current = unsub;
+
+      flushTimerRef.current = setInterval(() => {
+        void flushEvents(task.id);
+      }, FLUSH_INTERVAL_MS);
+    } else {
+      // Completed/failed/cancelled task — just set liveTask with historical
+      // logs so the LogsView can display them without a separate fetch
+      if (logEntries.length > 0) {
         const live: LiveTaskState = {
           taskId: task.id,
-          runId: task.run_id,
-          phase: task.status === 'clarifying' ? 'clarify' : 'execute',
+          runId: task.run_id ?? '',
+          phase: 'execute',
           plan: task.plan ?? null,
           deliverableKind: task.deliverable_kind ?? null,
           phases: {},
           activePhaseId: null,
           textAccumulated: '',
-          logEntries: [],
-          logSeqCounter: 0,
+          logEntries,
+          logSeqCounter: maxSeq + 1,
           turnsUsed: 0,
           readySeen: false,
           deliverableMarkdown: null,
           deliverableTitle: null,
           runInfo: null,
           model: undefined,
-          finalized: false,
+          finalized: true,
         };
-
-        // Hydrate phases from stored plan
         if (task.plan?.phases) {
           for (const phase of task.plan.phases) {
-            live.phases[phase.id] = {
-              status: phase.status,
-              name: phase.name,
-              summary: phase.summary,
-            };
+            live.phases[phase.id] = { status: phase.status, name: phase.name, summary: phase.summary };
           }
         }
-
         liveTaskRef.current = live;
         setLiveTask(live);
-
-        const unsub = window.cerebro.agent.onEvent(task.run_id, handleStreamEvent);
-        unsubRef.current = unsub;
-
-        flushTimerRef.current = setInterval(() => {
-          void flushEvents(task.id);
-        }, FLUSH_INTERVAL_MS);
       }
     }
   }, [handleStreamEvent, flushEvents]);

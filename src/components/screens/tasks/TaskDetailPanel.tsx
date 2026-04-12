@@ -40,9 +40,9 @@ export default function TaskDetailPanel({ taskId }: TaskDetailPanelProps) {
     return () => { cancelled = true; };
   }, [taskId, task?.status]);
 
-  // Attach live watcher when task is running
+  // Load persisted logs + attach live watcher for running tasks
   useEffect(() => {
-    if (task && (task.status === 'running' || task.status === 'clarifying')) {
+    if (task) {
       watchTask(taskId);
     }
     return () => unwatchTask();
