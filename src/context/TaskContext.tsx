@@ -262,12 +262,28 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     if (live.finalized) return;
     live.finalized = true;
 
+    // Flush any remaining parser buffer
     const parser = parserRef.current;
     if (parser) {
       for (const e of parser.flush()) handleParsedEvent(live, e);
     }
 
-    void flushEvents(live.taskId);
+    // Mark any in-progress phases as done so the plan shows correct state
+    if (live.plan) {
+      const finalPhaseStatus = status === 'completed' ? 'completed' : 'failed';
+      for (const phase of live.plan.phases) {
+        if (phase.status === 'running' || phase.status === 'pending') {
+          phase.status = finalPhaseStatus;
+        }
+        const phaseState = live.phases[phase.id];
+        if (phaseState && (phaseState.status === 'running' || phaseState.status === 'pending')) {
+          phaseState.status = finalPhaseStatus;
+        }
+      }
+    }
+
+    // Flush persisted events, THEN cleanup (so events aren't lost)
+    void flushEvents(live.taskId).then(() => cleanup());
 
     if (live.phase === 'execute') {
       void window.cerebro.invoke({
@@ -276,16 +292,36 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         body: {
           status,
           deliverable_markdown: status === 'completed'
-            ? (live.deliverableMarkdown ?? live.textAccumulated)
-            : undefined,
+            ? (live.deliverableMarkdown || live.textAccumulated || null)
+            : null,
           deliverable_title: status === 'completed'
             ? (live.deliverableTitle ?? null)
-            : undefined,
+            : null,
           deliverable_kind: live.deliverableKind ?? 'markdown',
           run_info: live.runInfo ?? null,
           error: error ?? null,
         },
       }).then(() => refresh());
+
+      // Optimistic update: immediately reflect completion in context tasks
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === live.taskId
+            ? {
+                ...t,
+                status: status as Task['status'],
+                deliverable_markdown: status === 'completed'
+                  ? (live.deliverableMarkdown || live.textAccumulated || t.deliverable_markdown)
+                  : t.deliverable_markdown,
+                deliverable_title: live.deliverableTitle ?? t.deliverable_title,
+                deliverable_kind: (live.deliverableKind ?? t.deliverable_kind) as Task['deliverable_kind'],
+                plan: live.plan ?? t.plan,
+                completed_at: new Date().toISOString(),
+                error: error ?? null,
+              }
+            : t,
+        ),
+      );
     } else if (live.phase === 'clarify') {
       if (status === 'failed') {
         void window.cerebro.invoke({
@@ -293,13 +329,17 @@ export function TaskProvider({ children }: { children: ReactNode }) {
           path: `/tasks/${live.taskId}/finalize`,
           body: { status: 'failed', error: error ?? null },
         }).then(() => refresh());
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.id === live.taskId ? { ...t, status: 'failed' as Task['status'], error: error ?? null } : t,
+          ),
+        );
       } else if (live.readySeen) {
         void autoStartExecuteRef.current?.(live.taskId, live.model);
       }
     }
 
     setLiveTask({ ...live });
-    cleanup();
   }, [flushEvents, handleParsedEvent, refresh, cleanup]);
 
   // ── Stream event handler ──────────────────────────────────────
@@ -655,10 +695,13 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   }, [handleStreamEvent, flushEvents]);
 
   const unwatchTask = useCallback(() => {
+    // Flush any pending events before tearing down so logs persist
+    const live = liveTaskRef.current;
+    if (live) void flushEvents(live.taskId);
     cleanup();
     liveTaskRef.current = null;
     setLiveTask(null);
-  }, [cleanup]);
+  }, [cleanup, flushEvents]);
 
   // Cleanup on unmount
   useEffect(() => {

@@ -24,7 +24,7 @@ export default function TaskDetailPanel({ taskId }: TaskDetailPanelProps) {
 
   const task = tasks.find((t) => t.id === taskId) ?? null;
 
-  // Fetch full detail on mount / id change
+  // Fetch full detail on mount, id change, or status change (e.g. after finalization)
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -38,7 +38,7 @@ export default function TaskDetailPanel({ taskId }: TaskDetailPanelProps) {
     };
     load();
     return () => { cancelled = true; };
-  }, [taskId]);
+  }, [taskId, task?.status]);
 
   // Attach live watcher when task is running
   useEffect(() => {

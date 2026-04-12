@@ -13,10 +13,9 @@ interface TaskLogsViewProps {
 
 export default function TaskLogsView({ task, liveTask }: TaskLogsViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
   const [historicalLogs, setHistoricalLogs] = useState<TaskLogEntry[]>([]);
-  // Suppress onScroll handler during programmatic scrolls
-  const isAutoScrolling = useRef(false);
 
   // Use live logs if available, otherwise fetch historical
   const entries = liveTask?.taskId === task.id
@@ -56,22 +55,25 @@ export default function TaskLogsView({ task, liveTask }: TaskLogsViewProps) {
     return () => { cancelled = true; };
   }, [task.id, liveTask?.taskId]);
 
-  // Auto-scroll: pin to bottom unless user has scrolled up
+  // Pin to bottom unless user scrolled up
   useEffect(() => {
-    if (autoScroll && scrollRef.current) {
-      isAutoScrolling.current = true;
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-      // Clear the flag after the browser processes the scroll event
-      requestAnimationFrame(() => { isAutoScrolling.current = false; });
+    if (!userScrolledUp) {
+      bottomRef.current?.scrollIntoView({ block: 'end' });
     }
-  }, [entries.length, autoScroll]);
+  });
 
-  const handleScroll = useCallback(() => {
-    // Ignore scroll events caused by our own scrollTop assignment
-    if (isAutoScrolling.current) return;
-    if (!scrollRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    setAutoScroll(scrollHeight - scrollTop - clientHeight < 60);
+  // Detect user scrolling up via wheel — the only reliable signal for intent
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (e.deltaY < 0) {
+      // User scrolled up
+      setUserScrolledUp(true);
+    } else if (e.deltaY > 0 && scrollRef.current) {
+      // User scrolled down — re-enable if near bottom
+      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+      if (scrollHeight - scrollTop - clientHeight < 80) {
+        setUserScrolledUp(false);
+      }
+    }
   }, []);
 
   if (entries.length === 0) {
@@ -88,20 +90,20 @@ export default function TaskLogsView({ task, liveTask }: TaskLogsViewProps) {
     <div className="flex-1 flex flex-col min-h-0 relative">
       <div
         ref={scrollRef}
-        onScroll={handleScroll}
+        onWheel={handleWheel}
         className="flex-1 overflow-y-auto px-4 py-3 font-mono text-xs bg-zinc-950/50"
       >
         {entries.map((entry, i) => (
           <LogEntry key={i} entry={entry} />
         ))}
+        <div ref={bottomRef} />
       </div>
 
-      {/* Jump to bottom */}
-      {!autoScroll && (
+      {userScrolledUp && (
         <button
           onClick={() => {
-            setAutoScroll(true);
-            scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+            setUserScrolledUp(false);
+            bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
           }}
           className="absolute bottom-4 right-4 p-2 rounded-full bg-bg-secondary border border-border-subtle text-text-secondary hover:text-text-primary shadow-lg cursor-pointer transition-colors"
         >
