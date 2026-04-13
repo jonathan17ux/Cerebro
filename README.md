@@ -209,14 +209,11 @@ See the full [roadmap](docs/roadmap.md) for details.
 
 ## Contributing
 
-Cerebro is open source and contributions are welcome.
+Cerebro is built in the open and we'd love your help. Whether it's a bug report, a feature idea, a docs improvement, or a pull request — every contribution matters.
 
-1. Fork the repository and create a feature branch
-2. Follow the existing code style — Prettier and ESLint are configured
-3. Add tests for new functionality
-4. Submit a pull request against `main`
+**The easiest way to start is to [open an issue](https://github.com/AgenticFirst/Cerebro/issues/new).** We use issues to discuss bugs, plan features, and answer questions before any code gets written.
 
-Please open an issue to discuss major changes before submitting a PR.
+Ready to contribute code? See **[CONTRIBUTING.md](CONTRIBUTING.md)** for setup instructions, PR guidelines, and good first issues.
 
 ## Star History
 
