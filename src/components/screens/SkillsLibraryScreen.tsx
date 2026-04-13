@@ -21,6 +21,7 @@ import {
   Dumbbell,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
 import { useSkills } from '../../context/SkillContext';
 import type { ImportedSkillData } from '../../context/SkillContext';
 import { useExperts } from '../../context/ExpertContext';
@@ -31,31 +32,32 @@ import SkillIcon, { ICON_MAP } from '../ui/SkillIcon';
 
 interface CategoryDef {
   id: SkillCategory | 'all' | 'my-skills';
-  label: string;
+  labelKey: string;
   icon: LucideIcon;
 }
 
 const CATEGORIES: CategoryDef[] = [
-  { id: 'all', label: 'All Skills', icon: Layers },
-  { id: 'general', label: 'General', icon: Layers },
-  { id: 'engineering', label: 'Engineering', icon: Code },
-  { id: 'content', label: 'Content', icon: FileTextIcon },
-  { id: 'operations', label: 'Operations', icon: Briefcase },
-  { id: 'support', label: 'Support', icon: Headphones },
-  { id: 'finance', label: 'Finance', icon: DollarSign },
-  { id: 'fitness', label: 'Fitness', icon: Dumbbell },
-  { id: 'productivity', label: 'Productivity', icon: ListChecks },
+  { id: 'all', labelKey: 'skills.categoryAll', icon: Layers },
+  { id: 'general', labelKey: 'skills.categoryGeneral', icon: Layers },
+  { id: 'engineering', labelKey: 'skills.categoryEngineering', icon: Code },
+  { id: 'content', labelKey: 'skills.categoryContent', icon: FileTextIcon },
+  { id: 'operations', labelKey: 'skills.categoryOperations', icon: Briefcase },
+  { id: 'support', labelKey: 'skills.categorySupport', icon: Headphones },
+  { id: 'finance', labelKey: 'skills.categoryFinance', icon: DollarSign },
+  { id: 'fitness', labelKey: 'skills.categoryFitness', icon: Dumbbell },
+  { id: 'productivity', labelKey: 'skills.categoryProductivity', icon: ListChecks },
 ];
 
 const SKILL_CATEGORIES = CATEGORIES.filter(
   (c) => c.id !== 'all' && c.id !== 'my-skills',
-) as { id: SkillCategory; label: string; icon: LucideIcon }[];
+) as { id: SkillCategory; labelKey: string; icon: LucideIcon }[];
 
 const ICON_NAMES = Object.keys(ICON_MAP);
 
 // ── Main Component ──────────────────────────────────────────────
 
 export default function SkillsLibraryScreen() {
+  const { t } = useTranslation();
   const {
     skills,
     isLoading,
@@ -272,7 +274,7 @@ export default function SkillsLibraryScreen() {
   if (isLoading && skills.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-text-tertiary">Loading skills...</p>
+        <p className="text-sm text-text-tertiary">{t('skills.loadingSkills')}</p>
       </div>
     );
   }
@@ -290,7 +292,7 @@ export default function SkillsLibraryScreen() {
             />
             <input
               type="text"
-              placeholder="Search skills..."
+              placeholder={t('skills.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-bg-base border border-border-subtle rounded-lg pl-8 pr-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors"
@@ -308,13 +310,13 @@ export default function SkillsLibraryScreen() {
             )}
           >
             <Plus size={13} strokeWidth={2} />
-            New Skill
+            {t('skills.newSkill')}
           </button>
         </div>
 
         {/* Category filter tabs */}
         <div className="px-3 pb-2 flex flex-wrap gap-1">
-          {[{ id: 'all', label: 'All' }, { id: 'my-skills', label: 'Mine' }].map((tab) => (
+          {[{ id: 'all', label: t('skills.filterAll') }, { id: 'my-skills', label: t('skills.filterMine') }].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveCategory(tab.id)}
@@ -349,7 +351,7 @@ export default function SkillsLibraryScreen() {
                       <ChevronDown size={12} className="text-text-tertiary" />
                     )}
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
-                      {catDef?.label ?? category}
+                      {catDef ? t(catDef.labelKey) : category}
                     </span>
                     <span className="text-[10px] text-text-tertiary ml-auto">
                       {categorySkills.length}
@@ -394,7 +396,7 @@ export default function SkillsLibraryScreen() {
 
           {filteredSkills.length === 0 && (
             <p className="text-xs text-text-tertiary px-2 py-4 text-center">
-              {searchQuery ? 'No matching skills.' : 'No skills found.'}
+              {searchQuery ? t('skills.noMatchingSkills') : t('skills.noSkillsFound')}
             </p>
           )}
         </div>
@@ -407,7 +409,7 @@ export default function SkillsLibraryScreen() {
           <div className="max-w-2xl px-8 py-8 space-y-6">
             {/* Header + close */}
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-text-primary">Add Skill</h2>
+              <h2 className="text-lg font-semibold text-text-primary">{t('skills.addSkill')}</h2>
               <button
                 onClick={handleCancelCreate}
                 className="p-1 rounded-md text-text-tertiary hover:text-text-secondary hover:bg-bg-hover transition-colors"
@@ -419,8 +421,8 @@ export default function SkillsLibraryScreen() {
             {/* Tabs */}
             <div className="flex gap-0 border-b border-border-subtle">
               {([
-                { id: 'import' as const, label: 'Import', icon: Download },
-                { id: 'manual' as const, label: 'Create Manually', icon: Plus },
+                { id: 'import' as const, label: t('skills.importTab'), icon: Download },
+                { id: 'manual' as const, label: t('skills.createTab'), icon: Plus },
               ]).map((tab) => {
                 const Icon = tab.icon;
                 const active = createTab === tab.id;
@@ -446,7 +448,7 @@ export default function SkillsLibraryScreen() {
               /* ── Import tab ──────────────────────────────────── */
               <div className="space-y-5">
                 <p className="text-xs text-text-secondary leading-relaxed">
-                  Import a skill from GitHub, skills.sh, or any URL that hosts a SKILL.md file.
+                  {t('skills.importDescription')}
                 </p>
 
                 {/* Input */}
@@ -456,7 +458,7 @@ export default function SkillsLibraryScreen() {
                     value={importInput}
                     onChange={(e) => { setImportInput(e.target.value); setImportError(null); }}
                     onKeyDown={(e) => e.key === 'Enter' && handleImport()}
-                    placeholder="Paste a URL, npx command, or owner/repo..."
+                    placeholder={t('skills.importPlaceholder')}
                     autoFocus
                     className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors"
                   />
@@ -478,35 +480,35 @@ export default function SkillsLibraryScreen() {
                     ) : (
                       <Download size={14} />
                     )}
-                    {isImporting ? 'Fetching skill...' : 'Import'}
+                    {isImporting ? t('skills.fetchingSkill') : t('skills.import')}
                   </button>
                 </div>
 
                 {/* Examples */}
                 <div className="bg-bg-base rounded-lg border border-border-subtle p-4 space-y-3">
                   <h4 className="text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
-                    SUPPORTED FORMATS
+                    {t('skills.supportedFormats')}
                   </h4>
                   <div className="space-y-2">
                     {[
                       {
-                        label: 'npx command',
+                        label: t('skills.formatNpx'),
                         example: 'npx skills add vercel-labs/skills --skill find-skills',
                       },
                       {
-                        label: 'GitHub shorthand',
+                        label: t('skills.formatGithubShort'),
                         example: 'owner/repo@skill-name',
                       },
                       {
-                        label: 'GitHub URL',
+                        label: t('skills.formatGithubUrl'),
                         example: 'https://github.com/org/repo/tree/main/skills/my-skill',
                       },
                       {
-                        label: 'skills.sh',
+                        label: t('skills.formatSkillsSh'),
                         example: 'https://skills.sh/owner/repo/skill-name',
                       },
                       {
-                        label: 'Direct URL',
+                        label: t('skills.formatDirectUrl'),
                         example: 'https://raw.githubusercontent.com/.../SKILL.md',
                       },
                     ].map(({ label, example }) => (
@@ -531,7 +533,7 @@ export default function SkillsLibraryScreen() {
                 {imported && (
                   <div className="bg-accent/5 border border-accent/15 rounded-lg px-3 py-2">
                     <p className="text-[11px] text-accent">
-                      Imported successfully. Review the details below and save.
+                      {t('skills.importSuccess')}
                     </p>
                   </div>
                 )}
@@ -539,13 +541,13 @@ export default function SkillsLibraryScreen() {
                 {/* Name */}
                 <div>
                   <h4 className="text-[10px] font-semibold uppercase tracking-wider text-accent mb-2">
-                    NAME
+                    {t('skills.nameLabel')}
                   </h4>
                   <input
                     type="text"
                     value={draftName}
                     onChange={(e) => setDraftName(e.target.value)}
-                    placeholder="e.g. Financial Analysis, API Testing"
+                    placeholder={t('skills.namePlaceholder')}
                     autoFocus={!imported}
                     className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors"
                   />
@@ -555,7 +557,7 @@ export default function SkillsLibraryScreen() {
                 <div className="flex gap-4">
                   <div className="flex-1">
                     <h4 className="text-[10px] font-semibold uppercase tracking-wider text-accent mb-2">
-                      CATEGORY
+                      {t('skills.categoryLabel')}
                     </h4>
                     <select
                       value={draftCategory}
@@ -564,14 +566,14 @@ export default function SkillsLibraryScreen() {
                     >
                       {SKILL_CATEGORIES.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.label}
+                          {t(c.labelKey)}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="w-40">
                     <h4 className="text-[10px] font-semibold uppercase tracking-wider text-accent mb-2">
-                      ICON
+                      {t('skills.iconLabel')}
                     </h4>
                     <div className="relative">
                       <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -595,12 +597,12 @@ export default function SkillsLibraryScreen() {
                 {/* Description */}
                 <div>
                   <h4 className="text-[10px] font-semibold uppercase tracking-wider text-accent mb-2">
-                    DESCRIPTION
+                    {t('skills.descriptionLabel')}
                   </h4>
                   <textarea
                     value={draftDescription}
                     onChange={(e) => setDraftDescription(e.target.value)}
-                    placeholder="One sentence explaining what this skill teaches an expert to do."
+                    placeholder={t('skills.descriptionPlaceholder')}
                     rows={2}
                     className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary leading-relaxed placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors resize-none"
                   />
@@ -610,16 +612,16 @@ export default function SkillsLibraryScreen() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-[10px] font-semibold uppercase tracking-wider text-accent">
-                      INSTRUCTIONS
+                      {t('skills.instructionsLabel')}
                     </h4>
                     <span className="text-[10px] text-text-tertiary">
-                      Markdown supported
+                      {t('skills.markdownSupported')}
                     </span>
                   </div>
                   <textarea
                     value={draftInstructions}
                     onChange={(e) => setDraftInstructions(e.target.value)}
-                    placeholder="Write or paste the skill instructions here. This markdown gets injected into the expert's system prompt when this skill is assigned."
+                    placeholder={t('skills.instructionsPlaceholder')}
                     rows={16}
                     className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-xs text-text-secondary font-mono leading-relaxed placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors resize-none"
                   />
@@ -638,13 +640,13 @@ export default function SkillsLibraryScreen() {
                     )}
                   >
                     <Save size={13} />
-                    {isSaving ? 'Creating...' : 'Create Skill'}
+                    {isSaving ? t('common.creating') : t('skills.createSkill')}
                   </button>
                   <button
                     onClick={handleCancelCreate}
                     className="px-3 py-1.5 rounded-lg text-xs font-medium text-text-tertiary hover:text-text-secondary hover:bg-bg-hover transition-colors"
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                 </div>
               </div>
@@ -667,11 +669,11 @@ export default function SkillsLibraryScreen() {
                     {selectedSkill.category}
                   </span>
                   <span className="text-[10px] text-text-tertiary">
-                    {selectedSkill.source} · v{selectedSkill.version}
+                    {t('skills.sourceVersion', { source: selectedSkill.source, version: selectedSkill.version })}
                   </span>
                   {selectedSkill.isDefault && (
                     <span className="text-[10px] text-text-tertiary bg-bg-elevated px-1.5 py-0.5 rounded">
-                      default
+                      {t('common.default')}
                     </span>
                   )}
                 </div>
@@ -681,7 +683,7 @@ export default function SkillsLibraryScreen() {
             {/* Description */}
             <div>
               <h4 className="text-[10px] font-semibold uppercase tracking-wider text-accent mb-2">
-                DESCRIPTION
+                {t('skills.descriptionLabel')}
               </h4>
               <textarea
                 value={editDescription}
@@ -699,10 +701,10 @@ export default function SkillsLibraryScreen() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h4 className="text-[10px] font-semibold uppercase tracking-wider text-accent">
-                  INSTRUCTIONS
+                  {t('skills.instructionsLabel')}
                 </h4>
                 {isBuiltin && (
-                  <span className="text-[10px] text-text-tertiary">Built-in — read only</span>
+                  <span className="text-[10px] text-text-tertiary">{t('skills.builtInReadOnly')}</span>
                 )}
               </div>
               <textarea
@@ -721,7 +723,7 @@ export default function SkillsLibraryScreen() {
             {selectedSkill.toolRequirements && selectedSkill.toolRequirements.length > 0 && (
               <div>
                 <h4 className="text-[10px] font-semibold uppercase tracking-wider text-accent mb-2">
-                  TOOLS
+                  {t('skills.toolsLabel')}
                 </h4>
                 <div className="flex flex-wrap gap-1.5">
                   {selectedSkill.toolRequirements.map((tool) => (
@@ -739,7 +741,7 @@ export default function SkillsLibraryScreen() {
             {/* Assigned to */}
             <div>
               <h4 className="text-[10px] font-semibold uppercase tracking-wider text-accent mb-2">
-                ASSIGNED TO
+                {t('skills.assignedTo')}
               </h4>
               {assignments.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5 mb-2">
@@ -756,7 +758,7 @@ export default function SkillsLibraryScreen() {
                   })}
                 </div>
               ) : (
-                <p className="text-xs text-text-tertiary mb-2">Not assigned to any experts.</p>
+                <p className="text-xs text-text-tertiary mb-2">{t('skills.notAssigned')}</p>
               )}
 
               {/* Assign dropdown */}
@@ -764,7 +766,7 @@ export default function SkillsLibraryScreen() {
                 <div className="bg-bg-base rounded-lg border border-border-subtle max-h-36 overflow-y-auto scrollbar-thin">
                   {assignableExperts.length === 0 ? (
                     <p className="text-xs text-text-tertiary px-3 py-2.5">
-                      All experts already have this skill.
+                      {t('skills.allExpertsHaveSkill')}
                     </p>
                   ) : (
                     assignableExperts.map((expert) => (
@@ -787,7 +789,7 @@ export default function SkillsLibraryScreen() {
                   className="flex items-center gap-1.5 text-xs text-accent hover:text-accent-hover transition-colors"
                 >
                   <Plus size={13} />
-                  Assign to Expert
+                  {t('skills.assignToExpert')}
                 </button>
               )}
             </div>
@@ -807,14 +809,14 @@ export default function SkillsLibraryScreen() {
                     )}
                   >
                     <Save size={13} />
-                    Save
+                    {t('common.save')}
                   </button>
                   <button
                     onClick={handleDelete}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-400/70 hover:text-red-400 hover:bg-red-400/10 transition-colors"
                   >
                     <Trash2 size={13} />
-                    Delete
+                    {t('common.delete')}
                   </button>
                 </>
               )}
@@ -826,9 +828,9 @@ export default function SkillsLibraryScreen() {
             <div className="w-16 h-16 rounded-xl border-2 border-dashed border-border-default flex items-center justify-center mb-4">
               <SkillIcon name="sparkles" size={24} className="text-text-tertiary" />
             </div>
-            <h3 className="text-sm font-medium text-text-primary mb-1.5">Skills Library</h3>
+            <h3 className="text-sm font-medium text-text-primary mb-1.5">{t('skills.emptyTitle')}</h3>
             <p className="text-xs text-text-secondary mb-4 max-w-[280px] text-center">
-              Skills are reusable capabilities you can assign to experts. Select a skill or add a new one.
+              {t('skills.emptyDescription')}
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -836,15 +838,15 @@ export default function SkillsLibraryScreen() {
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent/15 text-accent hover:bg-accent/25 border border-accent/20 transition-colors"
               >
                 <Download size={13} />
-                Import Skill
+                {t('skills.importSkill')}
               </button>
-              <span className="text-[10px] text-text-tertiary">or</span>
+              <span className="text-[10px] text-text-tertiary">{t('common.or')}</span>
               <button
                 onClick={() => { handleStartCreate(); setCreateTab('manual'); }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-white/[0.04] border border-border-subtle transition-colors"
               >
                 <Plus size={13} />
-                Create Manually
+                {t('skills.createManually')}
               </button>
             </div>
           </div>

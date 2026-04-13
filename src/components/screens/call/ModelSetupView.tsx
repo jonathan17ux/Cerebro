@@ -1,10 +1,12 @@
 import { AlertTriangle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ModelSetupViewProps {
   onBack: () => void;
 }
 
 export default function ModelSetupView({ onBack }: ModelSetupViewProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex-1 flex flex-col items-center justify-center px-6 animate-fade-in">
       <div className="w-full max-w-md text-center space-y-6">
@@ -14,19 +16,16 @@ export default function ModelSetupView({ onBack }: ModelSetupViewProps) {
 
         <div>
           <h2 className="text-xl font-semibold text-text-primary">
-            Voice Models Not Found
+            {t('call.modelsNotFound')}
           </h2>
           <p className="text-sm text-text-secondary mt-3 leading-relaxed">
-            Voice models are not installed. If you're running from source, run the
-            download script first:
+            {t('call.modelsNotInstalledPre')}
           </p>
           <pre className="mt-3 bg-bg-base border border-border-subtle rounded-lg px-4 py-2.5 text-xs text-accent font-mono text-left">
             python scripts/download-voice-models.py
           </pre>
           <p className="text-xs text-text-tertiary mt-3">
-            This downloads the Kokoro TTS model (~340 MB) to the voice-models/
-            directory. Whisper STT auto-downloads on first use. Production
-            builds bundle these automatically.
+            {t('call.modelsNotInstalledPost')}
           </p>
         </div>
 
@@ -34,7 +33,7 @@ export default function ModelSetupView({ onBack }: ModelSetupViewProps) {
           onClick={onBack}
           className="px-6 py-2 rounded-xl text-sm font-medium bg-bg-elevated hover:bg-bg-hover border border-border-subtle text-text-secondary transition-colors"
         >
-          Go Back
+          {t('call.goBack')}
         </button>
       </div>
     </div>

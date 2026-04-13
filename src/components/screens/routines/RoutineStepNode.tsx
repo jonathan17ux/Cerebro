@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Shield } from 'lucide-react';
 import clsx from 'clsx';
@@ -16,6 +17,7 @@ const CATEGORY_BG: Record<string, string> = {
 };
 
 function RoutineStepNode({ data, selected }: NodeProps) {
+  const { t } = useTranslation();
   const d = data as RoutineStepData;
   const resolved = resolveActionType(d.actionType);
   const meta = ACTION_META[resolved] ?? ACTION_META[d.actionType];
@@ -36,21 +38,21 @@ function RoutineStepNode({ data, selected }: NodeProps) {
     // AI actions
     if (resolved === 'ask_ai') {
       const prompt = (p.prompt as string) || '';
-      return prompt.length > 40 ? prompt.slice(0, 40) + '...' : prompt || 'No prompt set';
+      return prompt.length > 40 ? prompt.slice(0, 40) + '...' : prompt || t('routineEditor.noPromptSet');
     }
     if (resolved === 'run_expert') {
       const task = (p.task as string) || (p.prompt as string) || '';
-      return task.length > 40 ? task.slice(0, 40) + '...' : task || 'No task set';
+      return task.length > 40 ? task.slice(0, 40) + '...' : task || t('routineEditor.noTaskSet');
     }
     if (resolved === 'classify') {
       const cats = p.categories;
       if (Array.isArray(cats) && cats.length > 0) return `${cats.length} categories`;
-      return 'No categories defined';
+      return t('routineEditor.noCategoriesDefined');
     }
     if (resolved === 'extract') {
       const schema = p.schema;
       if (Array.isArray(schema) && schema.length > 0) return `${schema.length} fields`;
-      return 'No schema defined';
+      return t('routineEditor.noSchemaDefined');
     }
     if (resolved === 'summarize') {
       return (p.max_length as string) || 'medium';
@@ -59,7 +61,7 @@ function RoutineStepNode({ data, selected }: NodeProps) {
     // Knowledge actions
     if (resolved === 'search_memory' || resolved === 'search_web') {
       const q = (p.query as string) || '';
-      return q.length > 40 ? q.slice(0, 40) + '...' : q || 'No query set';
+      return q.length > 40 ? q.slice(0, 40) + '...' : q || t('routineEditor.noQuerySet');
     }
     if (resolved === 'save_to_memory') {
       return (p.scope as string) || 'global';
@@ -69,13 +71,13 @@ function RoutineStepNode({ data, selected }: NodeProps) {
     if (resolved === 'http_request') {
       const method = (p.method as string) || 'GET';
       const url = (p.url as string) || '';
-      return url ? `${method} ${url.slice(0, 30)}` : 'Not configured';
+      return url ? `${method} ${url.slice(0, 30)}` : t('triggers.notConfigured');
     }
     if (resolved === 'run_command') {
       const cmd = (p.command as string) || '';
       const args = (p.args as string) || '';
       const full = args ? `${cmd} ${args}` : cmd;
-      return full.length > 40 ? full.slice(0, 37) + '...' : full || 'No command set';
+      return full.length > 40 ? full.slice(0, 37) + '...' : full || t('routineEditor.noCommandSet');
     }
     if (resolved === 'run_claude_code') {
       const mode = (p.mode as string) || 'ask';
@@ -84,7 +86,7 @@ function RoutineStepNode({ data, selected }: NodeProps) {
 
     // Logic
     if (resolved === 'wait_for_webhook') {
-      return (p.match_path as string) || 'Waiting for webhook';
+      return (p.match_path as string) || t('routineEditor.waitingForWebhook');
     }
     if (resolved === 'run_script') {
       const lang = (p.language as string) || 'python';
@@ -96,28 +98,28 @@ function RoutineStepNode({ data, selected }: NodeProps) {
       const field = (p.field as string) || '';
       const op = (p.operator as string) || '';
       const val = (p.value as string) || '';
-      return field ? `${field} ${op} ${val}`.trim().slice(0, 40) : 'Not configured';
+      return field ? `${field} ${op} ${val}`.trim().slice(0, 40) : t('triggers.notConfigured');
     }
     if (resolved === 'loop') {
-      return (p.items_field as string) || 'No items field';
+      return (p.items_field as string) || t('routineEditor.noItemsField');
     }
     if (resolved === 'delay') {
       const dur = p.duration ?? '';
       const unit = (p.unit as string) || 'seconds';
-      return dur ? `${dur} ${unit}` : 'Not configured';
+      return dur ? `${dur} ${unit}` : t('triggers.notConfigured');
     }
     if (resolved === 'approval_gate') {
       const summary = (p.summary as string) || '';
-      return summary.length > 40 ? summary.slice(0, 40) + '...' : summary || 'Approval checkpoint';
+      return summary.length > 40 ? summary.slice(0, 40) + '...' : summary || t('routineEditor.approvalCheckpoint');
     }
 
     // Output
     if (resolved === 'send_message') {
       const msg = (p.message as string) || '';
-      return msg.length > 40 ? msg.slice(0, 40) + '...' : msg || 'No message set';
+      return msg.length > 40 ? msg.slice(0, 40) + '...' : msg || t('routineEditor.noMessageSet');
     }
     if (resolved === 'send_notification') {
-      return (p.title as string) || 'No title set';
+      return (p.title as string) || t('routineEditor.noTitleSet');
     }
 
     // Legacy fallbacks
@@ -125,10 +127,10 @@ function RoutineStepNode({ data, selected }: NodeProps) {
       return (p.operation as string) || 'format';
     }
     if (d.actionType === 'connector') {
-      return (p.service as string) || 'Not configured';
+      return (p.service as string) || t('triggers.notConfigured');
     }
     if (d.actionType === 'channel') {
-      return (p.channel as string) || 'Not configured';
+      return (p.channel as string) || t('triggers.notConfigured');
     }
 
     return '';

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { CheckCircle2, Circle, Loader2, XCircle, SkipForward } from 'lucide-react';
 import type { Task, PlanPhase } from './types';
@@ -33,6 +34,7 @@ const STATUS_COLOR = {
 } as const;
 
 export default function TaskPlanView({ task, liveTask }: TaskPlanViewProps) {
+  const { t } = useTranslation();
   // Prefer live state over persisted
   const plan = liveTask?.plan ?? task.plan;
   const livePhases = liveTask?.phases ?? {};
@@ -59,7 +61,7 @@ export default function TaskPlanView({ task, liveTask }: TaskPlanViewProps) {
       {deliverableKind && (
         <div className="mb-4">
           <span className="text-[11px] uppercase tracking-wider font-medium px-2 py-0.5 rounded bg-accent/10 text-accent">
-            {deliverableKind === 'code_app' ? 'Code App' : deliverableKind === 'mixed' ? 'Mixed' : 'Markdown'}
+            {deliverableKind === 'code_app' ? t('taskDetail.codeApp') : deliverableKind === 'mixed' ? t('taskDetail.mixed') : t('taskDetail.markdown')}
           </span>
         </div>
       )}

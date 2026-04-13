@@ -11,6 +11,7 @@ import type { Conversation, Message, Screen, ToolCall } from '../types/chat';
 import type { BackendResponse, RendererAgentEvent } from '../types/ipc';
 import { useProviders } from './ProviderContext';
 import { useRoutines } from './RoutineContext';
+import i18n from '../i18n';
 import type { DAGDefinition } from '../engine/dag/types';
 import {
   generateId,
@@ -365,6 +366,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             recentMessages: recentMessages.length > 0 ? recentMessages : undefined,
             routineProposals: routineProposals.length > 0 ? routineProposals : undefined,
             expertProposals: expertProposals.length > 0 ? expertProposals : undefined,
+            language: i18n.language !== 'en' ? i18n.language : undefined,
           });
 
           // Keep isThinking true and message.isThinking true until first content arrives

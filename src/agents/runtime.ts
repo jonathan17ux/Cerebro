@@ -373,6 +373,7 @@ ${answersSection}
       cwd,
       maxTurns,
       model: request.model,
+      language: request.language,
     });
 
     // For task execute/follow_up, also spawn a PTY runner for authentic terminal
@@ -403,6 +404,13 @@ ${answersSection}
         ipcMain.removeListener(IPC_CHANNELS.TASK_TERMINAL_RESIZE, resizeHandler);
       });
 
+      let ptySystemPrompt = 'CRITICAL: Never generate text on behalf of the user. Never output "User:" or simulate user messages. Your response ends when you have answered the request.';
+      if (request.language && request.language !== 'en') {
+        const LANGUAGE_NAMES: Record<string, string> = { es: 'Spanish / Espa\u00f1ol' };
+        const langName = LANGUAGE_NAMES[request.language] || request.language;
+        ptySystemPrompt += `\n\nIMPORTANT: You MUST respond in ${langName}. All your text output \u2014 explanations, summaries, instructions, and conversational replies \u2014 must be in ${langName}. Technical terms, code, file paths, and brand names (like "Cerebro") remain in their original language.`;
+      }
+
       ptyRunner.start({
         runId,
         prompt: fullPrompt,
@@ -410,7 +418,7 @@ ${answersSection}
         cwd,
         maxTurns,
         model: request.model,
-        appendSystemPrompt: 'CRITICAL: Never generate text on behalf of the user. Never output "User:" or simulate user messages. Your response ends when you have answered the request.',
+        appendSystemPrompt: ptySystemPrompt,
       });
     }
 

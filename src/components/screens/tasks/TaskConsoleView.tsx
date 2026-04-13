@@ -12,6 +12,7 @@
  */
 
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowDown } from 'lucide-react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -54,6 +55,7 @@ const THEME = {
 };
 
 export default function TaskConsoleView({ task, liveTask }: TaskConsoleViewProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -241,7 +243,7 @@ export default function TaskConsoleView({ task, liveTask }: TaskConsoleViewProps
     const isRunning = task.status === 'running' || task.status === 'clarifying';
     return (
       <div className="flex-1 flex items-center justify-center text-text-tertiary text-sm py-16">
-        {isRunning ? 'Waiting for output...' : 'No output'}
+        {isRunning ? t('taskDetail.waitingForOutput') : t('taskDetail.noOutput')}
       </div>
     );
   }

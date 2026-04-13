@@ -4,12 +4,14 @@
  */
 
 import { useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Bot, Pin } from 'lucide-react';
 import clsx from 'clsx';
 import { useExperts } from '../../context/ExpertContext';
 import { useChat } from '../../context/ChatContext';
 
 export default function ExpertTray() {
+  const { t } = useTranslation();
   const { experts, loadExperts } = useExperts();
   const { activeExpertId, setActiveExpertId } = useChat();
 
@@ -42,7 +44,7 @@ export default function ExpertTray() {
         )}
       >
         <Bot size={12} />
-        Cerebro
+        {t('expertTray.cerebro')}
       </button>
 
       {/* Expert pills */}

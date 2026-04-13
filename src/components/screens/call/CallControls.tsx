@@ -1,5 +1,6 @@
 import { Mic, PhoneOff, Subtitles } from 'lucide-react';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
 
 interface CallControlsProps {
   isSpeaking: boolean;
@@ -20,6 +21,7 @@ export default function CallControls({
   onEndCall,
   onToggleSubtitles,
 }: CallControlsProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-4">
       {/* Push-to-talk button */}
@@ -44,7 +46,7 @@ export default function CallControls({
               ? 'bg-bg-elevated border border-border-default text-text-secondary hover:text-text-primary hover:border-border-accent cursor-pointer'
               : 'bg-bg-elevated/50 border border-border-subtle text-text-tertiary cursor-not-allowed opacity-50',
         )}
-        title="Hold to talk (Space)"
+        title={t('call.holdToTalk')}
       >
         <Mic size={22} />
       </button>
@@ -53,7 +55,7 @@ export default function CallControls({
       <button
         onClick={onEndCall}
         className="w-14 h-14 rounded-full flex items-center justify-center bg-red-600 hover:bg-red-500 text-white transition-colors duration-200 shadow-lg shadow-red-900/30"
-        title="End Call (Esc)"
+        title={t('call.endCall')}
       >
         <PhoneOff size={22} />
       </button>
@@ -67,7 +69,7 @@ export default function CallControls({
             ? 'bg-accent/20 border border-accent/40 text-accent'
             : 'bg-bg-elevated border border-border-default text-text-tertiary hover:text-text-secondary',
         )}
-        title={subtitlesEnabled ? 'Hide captions' : 'Show captions'}
+        title={subtitlesEnabled ? t('call.hideCaptions') : t('call.showCaptions')}
       >
         <Subtitles size={20} />
       </button>

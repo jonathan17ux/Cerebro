@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useImperativeHandle, forwardRef, type KeyboardEvent, type ChangeEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowUp, Square, Paperclip } from 'lucide-react';
 import clsx from 'clsx';
 import ExpertTray from './ExpertTray';
@@ -17,6 +18,7 @@ export interface ChatInputHandle {
 
 const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
   function ChatInput({ onSend, isStreaming = false }, ref) {
+    const { t } = useTranslation();
     const [value, setValue] = useState('');
     const [attachments, setAttachments] = useState<AttachmentInfo[]>([]);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -128,7 +130,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             value={value}
             onChange={handleChange}
             onKeyDown={handleKeyDown}
-            placeholder="Send a message..."
+            placeholder={t('chat.sendPlaceholder')}
             rows={1}
             className={clsx(
               'flex-1 resize-none bg-transparent text-text-primary',
@@ -146,7 +148,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
               'text-text-tertiary hover:text-text-secondary hover:bg-bg-hover',
               'disabled:opacity-30 disabled:cursor-default',
             )}
-            title="Attach files"
+            title={t('chat.attachFiles')}
           >
             <Paperclip size={15} />
           </button>

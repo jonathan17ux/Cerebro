@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ChevronRight,
   CheckCircle2,
@@ -86,6 +87,7 @@ function formatDuration(ms: number): string {
 }
 
 export default function RunLogCard({ engineRunId, isPreview }: RunLogCardProps) {
+  const { t } = useTranslation();
   const [runStatus, setRunStatus] = useState<RunStatus>('running');
   const [steps, setSteps] = useState<StepState[]>([]);
   const [totalSteps, setTotalSteps] = useState(0);
@@ -290,16 +292,16 @@ export default function RunLogCard({ engineRunId, isPreview }: RunLogCardProps) 
   ).length;
   const displayTotal = totalSteps || steps.length;
 
-  const label = isPreviewRun ? 'Preview Run' : 'Routine Run';
+  const label = isPreviewRun ? t('runLog.previewRun') : t('runLog.routineRun');
 
   const statusLabel =
     runStatus === 'running'
-      ? 'Running'
+      ? t('status.running')
       : runStatus === 'completed'
-        ? 'Completed'
+        ? t('status.completed')
         : runStatus === 'failed'
-          ? 'Failed'
-          : 'Cancelled';
+          ? t('status.failed')
+          : t('status.cancelled');
 
   return (
     <div className="animate-fade-in rounded-lg border overflow-hidden border-border-default bg-bg-surface/50">
@@ -314,13 +316,13 @@ export default function RunLogCard({ engineRunId, isPreview }: RunLogCardProps) 
         <RunStatusIcon status={runStatus} />
         <span className="flex-1 text-xs font-medium text-text-secondary">{label}</span>
         <span className="text-[10px] text-text-tertiary">
-          {completedCount}/{displayTotal} steps
+          {t('runLog.stepsProgress', { done: completedCount, total: displayTotal })}
         </span>
         {runStatus === 'running' && (
           <button
             onClick={handleCancel}
             className="p-0.5 rounded hover:bg-bg-hover text-text-tertiary hover:text-red-400 transition-colors cursor-pointer"
-            aria-label="Cancel run"
+            aria-label={t('runLog.cancelRun')}
           >
             <X size={12} />
           </button>

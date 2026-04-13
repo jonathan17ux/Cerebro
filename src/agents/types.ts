@@ -61,6 +61,8 @@ export interface AgentRunRequest {
   model?: string;
   /** Pre-formatted context block for follow-up runs (original goal + previous deliverable). */
   followUpContext?: string;
+  /** UI language code (e.g. "es"). When set and not "en", the AI is instructed to respond in that language. */
+  language?: string;
 }
 
 // ── Events sent to renderer ─────────────────────────────────────

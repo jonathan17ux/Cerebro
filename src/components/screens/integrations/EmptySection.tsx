@@ -1,4 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface EmptySectionProps {
   sectionTitle: string;
@@ -13,6 +14,7 @@ export default function EmptySection({
   icon: Icon,
   comingSoonText,
 }: EmptySectionProps) {
+  const { t } = useTranslation();
   return (
     <div>
       <h2 className="text-lg font-medium text-text-primary">{sectionTitle}</h2>
@@ -23,7 +25,7 @@ export default function EmptySection({
           <Icon size={18} className="text-text-tertiary" />
         </div>
         <span className="text-xs font-medium text-text-tertiary uppercase tracking-wide mb-2">
-          Coming Soon
+          {t('common.comingSoon')}
         </span>
         <p className="text-sm text-text-secondary max-w-sm leading-relaxed">{comingSoonText}</p>
       </div>

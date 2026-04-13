@@ -31,6 +31,7 @@ import type {
 } from '../components/screens/tasks/types';
 import type { RendererAgentEvent } from '../types/ipc';
 import { appendTaskTerminalData, clearTaskTerminalBuffer } from '../components/screens/tasks/taskTerminalBuffer';
+import i18n from '../i18n';
 
 // ── Context types ───────────────────────────────────────────────
 
@@ -486,6 +487,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         clarificationAnswers,
         model,
         followUpContext: followUp?.context,
+        language: i18n.language !== 'en' ? i18n.language : undefined,
       });
     },
     [handleStreamEvent, flushEvents],

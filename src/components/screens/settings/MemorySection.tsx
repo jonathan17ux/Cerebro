@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { FileText, FolderOpen, Plus, Save, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
 import { useMemory } from '../../../context/MemoryContext';
 import { timeAgo } from '../activity/helpers';
 import type { AgentMemoryFileContent } from '../../../types/memory';
 
 export default function MemorySection() {
+  const { t } = useTranslation();
   const { directories, files, loadDirectories, loadFiles, readFile, writeFile, deleteFile } =
     useMemory();
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
@@ -84,10 +86,9 @@ export default function MemorySection() {
   return (
     <div className="flex flex-col gap-6 flex-1 min-h-0">
       <div>
-        <h2 className="text-lg font-medium text-text-primary mb-1">Memory</h2>
+        <h2 className="text-lg font-medium text-text-primary mb-1">{t('memory.title')}</h2>
         <p className="text-sm text-text-secondary">
-          Each agent has its own memory directory. These markdown files are read by the agent at
-          the start of every turn and edited as it learns.
+          {t('memory.description')}
         </p>
       </div>
 
@@ -96,11 +97,11 @@ export default function MemorySection() {
         <div className="w-64 flex-shrink-0 border-r border-border-subtle overflow-y-auto scrollbar-thin">
           <div className="p-3">
             <div className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary mb-2 px-2">
-              Agents
+              {t('memory.agents')}
             </div>
             <div className="space-y-px">
               {directories.length === 0 && (
-                <div className="text-xs text-text-tertiary px-2 py-3">No agents yet.</div>
+                <div className="text-xs text-text-tertiary px-2 py-3">{t('memory.noAgentsYet')}</div>
               )}
               {directories.map((dir) => {
                 const active = dir.slug === selectedSlug;
@@ -134,12 +135,12 @@ export default function MemorySection() {
             <div className="border-t border-border-subtle p-3">
               <div className="flex items-center justify-between mb-2 px-2">
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
-                  Files
+                  {t('memory.files')}
                 </span>
                 <button
                   onClick={() => setCreating((v) => !v)}
                   className="text-text-tertiary hover:text-text-primary transition-colors cursor-pointer"
-                  title="New file"
+                  title={t('memory.newFile')}
                 >
                   <Plus size={12} />
                 </button>
@@ -151,7 +152,7 @@ export default function MemorySection() {
                     type="text"
                     value={newPath}
                     onChange={(e) => setNewPath(e.target.value)}
-                    placeholder="notes.md"
+                    placeholder={t('memory.newFilePlaceholder')}
                     className="w-full bg-bg-base border border-border-subtle rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-tertiary/50 focus:outline-none focus:border-accent/40"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleCreate();
@@ -166,7 +167,7 @@ export default function MemorySection() {
 
               <div className="space-y-px">
                 {slugFiles.length === 0 && !creating && (
-                  <div className="text-xs text-text-tertiary px-2 py-2">No files yet.</div>
+                  <div className="text-xs text-text-tertiary px-2 py-2">{t('memory.noFilesYet')}</div>
                 )}
                 {slugFiles.map((f) => {
                   const active = f.path === selectedFile;
@@ -210,7 +211,7 @@ export default function MemorySection() {
                     className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-text-tertiary hover:text-red-400 hover:bg-white/[0.04] transition-colors cursor-pointer"
                   >
                     <Trash2 size={11} />
-                    Delete
+                    {t('common.delete')}
                   </button>
                   <button
                     onClick={handleSave}
@@ -218,14 +219,14 @@ export default function MemorySection() {
                     className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-accent/15 text-accent hover:bg-accent/25 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Save size={11} />
-                    Save
+                    {t('common.save')}
                   </button>
                 </div>
               </div>
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="Write markdown the agent should read on every turn..."
+                placeholder={t('memory.editorPlaceholder')}
                 className="flex-1 w-full bg-bg-base px-4 py-3 text-sm text-text-secondary font-mono leading-relaxed resize-none focus:outline-none placeholder:text-text-tertiary/50"
               />
             </>
@@ -233,14 +234,13 @@ export default function MemorySection() {
             <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
               <FileText size={28} className="text-text-tertiary/50 mb-3" />
               <div className="text-sm text-text-secondary">
-                {selectedSlug ? 'Select a file or create a new one.' : 'Select an agent to view its memory.'}
+                {selectedSlug ? t('memory.selectFile') : t('memory.selectAgent')}
               </div>
               {directories.length > 0 && selectedSlug && (
                 <div className="text-xs text-text-tertiary mt-2">
-                  Last updated:{' '}
-                  {timeAgo(
+                  {t('memory.lastUpdated', { time: timeAgo(
                     directories.find((d) => d.slug === selectedSlug)?.lastModified ?? null,
-                  )}
+                  ) })}
                 </div>
               )}
             </div>

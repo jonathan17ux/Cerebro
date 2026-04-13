@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Cpu, Puzzle, MessageSquare, Wifi, type LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
 import EngineSection from './integrations/EngineSection';
 import ConnectedAppsSection from './integrations/ConnectedAppsSection';
 import ChannelsSection from './integrations/ChannelsSection';
@@ -8,20 +9,27 @@ import EmptySection from './integrations/EmptySection';
 
 type Section = 'engine' | 'connected-apps' | 'channels' | 'remote-access';
 
+const SECTION_KEYS: Record<Section, string> = {
+  'engine': 'integrations.engine',
+  'connected-apps': 'integrations.connectedApps',
+  'channels': 'integrations.channels',
+  'remote-access': 'integrations.remoteAccess',
+};
+
 interface SectionNavItem {
   id: Section;
-  label: string;
   icon: LucideIcon;
 }
 
 const SECTIONS: SectionNavItem[] = [
-  { id: 'engine', label: 'Engine', icon: Cpu },
-  { id: 'connected-apps', label: 'Connected Apps', icon: Puzzle },
-  { id: 'channels', label: 'Channels', icon: MessageSquare },
-  { id: 'remote-access', label: 'Remote Access', icon: Wifi },
+  { id: 'engine', icon: Cpu },
+  { id: 'connected-apps', icon: Puzzle },
+  { id: 'channels', icon: MessageSquare },
+  { id: 'remote-access', icon: Wifi },
 ];
 
 export default function IntegrationsScreen() {
+  const { t } = useTranslation();
   const [activeSection, setActiveSection] = useState<Section>('engine');
 
   return (
@@ -29,7 +37,7 @@ export default function IntegrationsScreen() {
       {/* Inner sidebar */}
       <div className="w-48 flex-shrink-0 border-r border-white/[0.06] py-4 px-2.5">
         <div className="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary px-2.5 mb-3 select-none">
-          Integrations
+          {t('integrations.title')}
         </div>
         <div className="space-y-px">
           {SECTIONS.map((section) => {
@@ -58,7 +66,7 @@ export default function IntegrationsScreen() {
                 >
                   <Icon size={14} strokeWidth={isActive ? 2 : 1.5} />
                 </div>
-                <span className="text-[13px] leading-none">{section.label}</span>
+                <span className="text-[13px] leading-none">{t(SECTION_KEYS[section.id])}</span>
               </button>
             );
           })}
@@ -73,10 +81,10 @@ export default function IntegrationsScreen() {
           {activeSection === 'channels' && <ChannelsSection />}
           {activeSection === 'remote-access' && (
             <EmptySection
-              sectionTitle="Remote Access"
-              sectionDescription="Enable inbound events and remote triggers to reach Cerebro when you're away."
+              sectionTitle={t('integrations.remoteAccess')}
+              sectionDescription={t('integrations.remoteAccessDescription')}
               icon={Wifi}
-              comingSoonText="Outbound relay, webhook endpoints, and identity pairing will be available in a future release."
+              comingSoonText={t('integrations.remoteAccessComingSoon')}
             />
           )}
         </div>

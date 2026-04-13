@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronRight, Search, Brain, Zap, Globe, CheckCircle2, XCircle, Loader2, Users, FileText, Pencil, FilePlus, Terminal, FolderSearch, Code, Clock } from 'lucide-react';
 import clsx from 'clsx';
 import type { ToolCall } from '../../types/chat';
@@ -55,6 +56,7 @@ interface ToolCallCardProps {
 }
 
 export default function ToolCallCard({ toolCall }: ToolCallCardProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
@@ -124,7 +126,7 @@ export default function ToolCallCard({ toolCall }: ToolCallCardProps) {
           {delegationTask && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1">
-                Task
+                {t('toolCall.task')}
               </div>
               <div className="bg-bg-base rounded-md px-2.5 py-2 text-xs text-text-secondary">
                 {delegationTask}
@@ -136,7 +138,7 @@ export default function ToolCallCard({ toolCall }: ToolCallCardProps) {
           {!isDelegation && toolCall.arguments && Object.keys(toolCall.arguments).length > 0 && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1">
-                Arguments
+                {t('toolCall.arguments')}
               </div>
               <div className="bg-bg-base rounded-md px-2.5 py-2 font-mono text-xs text-text-secondary">
                 {Object.entries(toolCall.arguments).map(([key, val]) => (
@@ -154,7 +156,7 @@ export default function ToolCallCard({ toolCall }: ToolCallCardProps) {
           {displayOutput && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1">
-                {isDelegation ? 'Response' : 'Output'}
+                {isDelegation ? t('toolCall.response') : t('toolCall.output')}
               </div>
               <div className="bg-bg-base rounded-md px-2.5 py-2 font-mono text-xs text-text-secondary whitespace-pre-wrap">
                 {displayOutput}
@@ -167,8 +169,8 @@ export default function ToolCallCard({ toolCall }: ToolCallCardProps) {
             <div className="flex items-center gap-2 text-xs text-text-tertiary py-1">
               <Loader2 size={12} className="animate-spin" />
               {isDelegation && expertName
-                ? `Waiting for ${expertName}...`
-                : elapsed > 0 ? `Running... ${elapsed}s` : 'Running...'}
+                ? t('toolCall.waitingFor', { name: expertName })
+                : elapsed > 0 ? t('toolCall.runningElapsed', { seconds: elapsed }) : t('toolCall.running')}
             </div>
           )}
         </div>

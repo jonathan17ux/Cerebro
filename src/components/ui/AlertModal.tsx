@@ -5,6 +5,7 @@
 
 import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface AlertAction {
   label: string;
@@ -22,6 +23,7 @@ interface AlertModalProps {
 }
 
 export default function AlertModal({ icon, title, message, actions, onClose }: AlertModalProps) {
+  const { t } = useTranslation();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
@@ -74,7 +76,7 @@ export default function AlertModal({ icon, title, message, actions, onClose }: A
               onClick={onClose}
               className="px-4 py-1.5 rounded-md text-xs font-medium bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20 transition-colors cursor-pointer"
             >
-              Got it
+              {t('alert.defaultAction')}
             </button>
           )}
         </div>

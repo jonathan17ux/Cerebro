@@ -1,4 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useChat } from '../../context/ChatContext';
 import Sidebar from './Sidebar';
 import ChatView from '../chat/ChatView';
@@ -16,6 +17,7 @@ import PlaceholderScreen from '../screens/PlaceholderScreen';
 import AlertModal from '../ui/AlertModal';
 
 export default function AppLayout() {
+  const { t } = useTranslation();
   const {
     activeConversation,
     isStreaming,
@@ -87,9 +89,9 @@ export default function AppLayout() {
           actions={
             chatError.navigateTo
               ? [
-                  { label: 'Dismiss', onClick: dismissChatError },
+                  { label: t('common.dismiss'), onClick: dismissChatError },
                   {
-                    label: 'Go to Integrations',
+                    label: t('nav.integrations'),
                     primary: true,
                     onClick: () => {
                       dismissChatError();

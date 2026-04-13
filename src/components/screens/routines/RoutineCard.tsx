@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Play, Hand, Clock, Webhook, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import type { Routine } from '../../../types/routines';
@@ -7,11 +8,11 @@ import { describeCron } from '../../../utils/cron-helpers';
 
 // ── Helpers ────────────────────────────────────────────────────
 
-function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return 'Never';
+function timeAgo(dateStr: string | null, t: (key: string, opts?: Record<string, unknown>) => string): string {
+  if (!dateStr) return t('routineEditor.never');
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
+  if (mins < 1) return t('routineEditor.justNow');
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
@@ -19,10 +20,10 @@ function timeAgo(dateStr: string | null): string {
   return `${days}d ago`;
 }
 
-const TRIGGER_META: Record<string, { icon: typeof Hand; label: string }> = {
-  manual: { icon: Hand, label: 'Manual' },
-  cron: { icon: Clock, label: 'Scheduled' },
-  webhook: { icon: Webhook, label: 'Webhook' },
+const TRIGGER_META: Record<string, { icon: typeof Hand; labelKey: string }> = {
+  manual: { icon: Hand, labelKey: 'triggers.manual' },
+  cron: { icon: Clock, labelKey: 'triggers.scheduled' },
+  webhook: { icon: Webhook, labelKey: 'triggers.webhook' },
 };
 
 // ── Component ──────────────────────────────────────────────────
@@ -44,6 +45,7 @@ export default function RoutineCard({
   onRun,
   onDelete,
 }: RoutineCardProps) {
+  const { t } = useTranslation();
   const [isHovered, setIsHovered] = useState(false);
   const trigger = TRIGGER_META[routine.triggerType] ?? TRIGGER_META.manual;
   const TriggerIcon = trigger.icon;
@@ -70,7 +72,7 @@ export default function RoutineCard({
               )}
             >
               <TriggerIcon size={10} />
-              {trigger.label}
+              {t(trigger.labelKey)}
             </span>
             {routine.triggerType === 'cron' && routine.cronExpression && (
               <span className="text-[10px] text-text-tertiary flex-shrink-0">
@@ -110,7 +112,7 @@ export default function RoutineCard({
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-border-subtle">
         <div className="flex items-center gap-3 text-[11px] text-text-tertiary">
           <span>
-            Last run: <span className="text-text-secondary">{timeAgo(routine.lastRunAt)}</span>
+            Last run: <span className="text-text-secondary">{timeAgo(routine.lastRunAt, t)}</span>
           </span>
           {routine.runCount > 0 && (
             <span>

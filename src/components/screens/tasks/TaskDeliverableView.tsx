@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import MarkdownContent from '../../chat/MarkdownContent';
 import TaskDevServerPanel from './TaskDevServerPanel';
@@ -9,6 +10,7 @@ interface TaskDeliverableViewProps {
 }
 
 export default function TaskDeliverableView({ task, detail }: TaskDeliverableViewProps) {
+  const { t } = useTranslation();
   const isRunning = task.status === 'running' || task.status === 'clarifying' || task.status === 'planning';
 
   if (!task.deliverable_markdown) {
@@ -36,7 +38,7 @@ export default function TaskDeliverableView({ task, detail }: TaskDeliverableVie
       {task.deliverable_kind !== 'markdown' && (
         <div className="mb-3">
           <span className="text-[11px] uppercase tracking-wider font-medium px-2 py-0.5 rounded bg-accent/10 text-accent">
-            {task.deliverable_kind === 'code_app' ? 'Code App' : 'Mixed'}
+            {task.deliverable_kind === 'code_app' ? t('taskDetail.codeApp') : t('taskDetail.mixed')}
           </span>
         </div>
       )}

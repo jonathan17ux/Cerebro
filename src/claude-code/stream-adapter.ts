@@ -31,6 +31,8 @@ export interface ClaudeCodeRunOptions {
   maxTurns?: number;
   /** Override the model (e.g. "sonnet", "opus", "claude-sonnet-4-6"). */
   model?: string;
+  /** UI language code (e.g. "es"). When set and not "en", a language directive is appended to the system prompt. */
+  language?: string;
 }
 
 /**
@@ -61,6 +63,14 @@ export class ClaudeCodeRunner extends EventEmitter {
       return;
     }
 
+    let systemPromptAppend = 'CRITICAL: Never generate text on behalf of the user. Never output "User:" or simulate user messages. Your response ends when you have answered the request.';
+
+    if (options.language && options.language !== 'en') {
+      const LANGUAGE_NAMES: Record<string, string> = { es: 'Spanish / Espa\u00f1ol' };
+      const langName = LANGUAGE_NAMES[options.language] || options.language;
+      systemPromptAppend += `\n\nIMPORTANT: You MUST respond in ${langName}. All your text output \u2014 explanations, summaries, instructions, and conversational replies \u2014 must be in ${langName}. Technical terms, code, file paths, and brand names (like "Cerebro") remain in their original language.`;
+    }
+
     const args: string[] = [
       '-p', prompt,
       '--agent', agentName,
@@ -68,7 +78,7 @@ export class ClaudeCodeRunner extends EventEmitter {
       '--verbose',
       '--max-turns', String(options.maxTurns ?? 15),
       '--dangerously-skip-permissions',
-      '--append-system-prompt', 'CRITICAL: Never generate text on behalf of the user. Never output "User:" or simulate user messages. Your response ends when you have answered the request.',
+      '--append-system-prompt', systemPromptAppend,
     ];
 
     args.push('--model', options.model || 'sonnet');

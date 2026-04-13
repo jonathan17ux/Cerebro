@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Zap,
   Play,
@@ -23,13 +24,14 @@ interface RoutineProposalCardProps {
   conversationId: string;
 }
 
-const TRIGGER_LABELS: Record<string, string> = {
-  manual: 'Manual',
-  cron: 'Scheduled',
-  webhook: 'Webhook',
+const TRIGGER_LABEL_KEYS: Record<string, string> = {
+  manual: 'triggers.manual',
+  cron: 'triggers.scheduled',
+  webhook: 'triggers.webhook',
 };
 
 function StatusBadge({ status }: { status: RoutineProposal['status'] }) {
+  const { t } = useTranslation();
   const styles = {
     proposed: 'bg-cyan-500/15 text-cyan-400',
     previewing: 'bg-yellow-500/15 text-yellow-400',
@@ -37,10 +39,10 @@ function StatusBadge({ status }: { status: RoutineProposal['status'] }) {
     dismissed: 'bg-zinc-500/15 text-zinc-400',
   };
   const labels = {
-    proposed: 'Proposed',
-    previewing: 'Previewing',
-    saved: 'Saved',
-    dismissed: 'Dismissed',
+    proposed: t('status.proposed'),
+    previewing: t('status.previewing'),
+    saved: t('status.saved'),
+    dismissed: t('status.dismissed'),
   };
 
   return (
@@ -55,6 +57,7 @@ export default function RoutineProposalCard({
   messageId,
   conversationId,
 }: RoutineProposalCardProps) {
+  const { t } = useTranslation();
   const { updateMessage, addMessage } = useChat();
   const { createRoutine } = useRoutines();
   const [isSaving, setIsSaving] = useState(false);
@@ -245,7 +248,7 @@ export default function RoutineProposalCard({
         <div className="border-t border-border-subtle px-3 py-1.5 flex items-center gap-3 flex-wrap">
           <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
             <Clock size={10} />
-            {TRIGGER_LABELS[proposal.triggerType] ?? proposal.triggerType}
+            {TRIGGER_LABEL_KEYS[proposal.triggerType] ? t(TRIGGER_LABEL_KEYS[proposal.triggerType]) : proposal.triggerType}
             {proposal.cronExpression && ` (${proposal.cronExpression})`}
           </span>
           {proposal.requiredConnections.length > 0 && (
@@ -257,7 +260,7 @@ export default function RoutineProposalCard({
           {proposal.approvalGates.length > 0 && (
             <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
               <ShieldCheck size={10} />
-              {proposal.approvalGates.length} approval gate{proposal.approvalGates.length !== 1 && 's'}
+              {t('routineProposal.approvalGate', { count: proposal.approvalGates.length })}
             </span>
           )}
         </div>
@@ -280,7 +283,7 @@ export default function RoutineProposalCard({
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-bg-hover/50 text-text-secondary hover:bg-bg-hover transition-colors cursor-pointer disabled:opacity-50"
           >
             <Play size={11} />
-            Preview
+            {t('expertProposal.preview')}
           </button>
           <button
             onClick={handleSave}
@@ -288,14 +291,14 @@ export default function RoutineProposalCard({
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-accent/15 text-accent hover:bg-accent/25 transition-colors cursor-pointer disabled:opacity-50"
           >
             <Save size={11} />
-            Save Routine
+            {t('routineProposal.saveRoutine')}
           </button>
           <button
             onClick={handleDismiss}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-text-tertiary hover:text-text-secondary hover:bg-bg-hover/50 transition-colors cursor-pointer ml-auto"
           >
             <X size={11} />
-            Dismiss
+            {t('common.dismiss')}
           </button>
         </div>
       )}
@@ -308,7 +311,7 @@ export default function RoutineProposalCard({
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-accent/15 text-accent hover:bg-accent/25 transition-colors cursor-pointer disabled:opacity-50"
           >
             <Save size={11} />
-            Save Routine
+            {t('routineProposal.saveRoutine')}
           </button>
         </div>
       )}
@@ -317,7 +320,7 @@ export default function RoutineProposalCard({
         <div className="border-t border-border-subtle px-3 py-2">
           <span className="flex items-center gap-1.5 text-[11px] text-green-400 font-medium">
             <CheckCircle2 size={12} />
-            Saved as routine
+            {t('routineProposal.savedAsRoutine')}
           </span>
         </div>
       )}

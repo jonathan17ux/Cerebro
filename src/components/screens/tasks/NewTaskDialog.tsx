@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, ChevronDown } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -19,23 +20,24 @@ interface NewTaskDialogProps {
 }
 
 const MODELS = [
-  { value: '', label: 'Sonnet (default)' },
-  { value: 'opus', label: 'Opus (powerful)' },
-  { value: 'haiku', label: 'Haiku (light)' },
+  { value: '', key: 'newTaskDialog.modelSonnet' },
+  { value: 'opus', key: 'newTaskDialog.modelOpus' },
+  { value: 'haiku', key: 'newTaskDialog.modelHaiku' },
 ] as const;
 
 const TEMPLATES = [
-  { id: 'presentation', label: 'Presentation' },
-  { id: 'web-app', label: 'Web App' },
-  { id: 'mobile-app', label: 'Mobile App (Expo)' },
-  { id: 'research', label: 'Research Brief' },
-  { id: 'trip-plan', label: 'Trip Plan' },
-  { id: 'code-audit', label: 'Code Audit' },
-  { id: 'meal-plan', label: 'Meal Plan' },
-  { id: 'cli-tool', label: 'CLI Tool' },
+  { id: 'presentation', key: 'newTaskDialog.templatePresentation' },
+  { id: 'web-app', key: 'newTaskDialog.templateWebApp' },
+  { id: 'mobile-app', key: 'newTaskDialog.templateMobileApp' },
+  { id: 'research', key: 'newTaskDialog.templateResearchBrief' },
+  { id: 'trip-plan', key: 'newTaskDialog.templateTripPlan' },
+  { id: 'code-audit', key: 'newTaskDialog.templateCodeAudit' },
+  { id: 'meal-plan', key: 'newTaskDialog.templateMealPlan' },
+  { id: 'cli-tool', key: 'newTaskDialog.templateCliTool' },
 ];
 
 export default function NewTaskDialog({ open, onClose, onSubmit, initialGoal }: NewTaskDialogProps) {
+  const { t } = useTranslation();
   const [goal, setGoal] = useState(initialGoal ?? '');
   const [skipClarification, setSkipClarification] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -100,7 +102,7 @@ export default function NewTaskDialog({ open, onClose, onSubmit, initialGoal }: 
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-2">
-          <h2 className="text-base font-semibold text-text-primary">New Task</h2>
+          <h2 className="text-base font-semibold text-text-primary">{t('newTaskDialog.title')}</h2>
           <button
             onClick={onClose}
             className="p-1 rounded-md hover:bg-bg-secondary text-text-tertiary hover:text-text-primary transition-colors cursor-pointer"
@@ -115,7 +117,7 @@ export default function NewTaskDialog({ open, onClose, onSubmit, initialGoal }: 
             ref={textareaRef}
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
-            placeholder="What do you want Cerebro to do? Spec, app, research, whatever — it'll figure it out."
+            placeholder={t('newTaskDialog.placeholder')}
             className="w-full bg-bg-secondary border border-border-subtle rounded-lg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-tertiary resize-none focus:outline-none focus:ring-1 focus:ring-accent/50 min-h-[100px] max-h-[240px]"
             rows={4}
           />
@@ -123,20 +125,20 @@ export default function NewTaskDialog({ open, onClose, onSubmit, initialGoal }: 
 
         {/* Template chips */}
         <div className="px-5 pb-3 flex flex-wrap gap-1.5">
-          {TEMPLATES.map((t) => (
+          {TEMPLATES.map((tp) => (
             <button
-              key={t.id}
+              key={tp.id}
               onClick={() => {
-                setSelectedTemplate(t.id === selectedTemplate ? null : t.id);
+                setSelectedTemplate(tp.id === selectedTemplate ? null : tp.id);
               }}
               className={clsx(
                 'text-xs px-2.5 py-1 rounded-full border transition-colors cursor-pointer',
-                t.id === selectedTemplate
+                tp.id === selectedTemplate
                   ? 'bg-accent/15 border-accent/30 text-accent'
                   : 'bg-bg-secondary border-border-subtle text-text-secondary hover:text-text-primary hover:border-border-default',
               )}
             >
-              {t.label}
+              {t(tp.key)}
             </button>
           ))}
         </div>
@@ -158,7 +160,7 @@ export default function NewTaskDialog({ open, onClose, onSubmit, initialGoal }: 
             />
           </button>
           <span className="text-xs text-text-secondary">
-            Skip clarification — just run it
+            {t('newTaskDialog.skipClarification')}
           </span>
         </div>
 
@@ -172,13 +174,13 @@ export default function NewTaskDialog({ open, onClose, onSubmit, initialGoal }: 
               size={12}
               className={clsx('transition-transform', showAdvanced && 'rotate-180')}
             />
-            Advanced
+            {t('newTaskDialog.advanced')}
           </button>
           {showAdvanced && (
             <div className="mt-2 space-y-3">
               <div>
                 <label className="text-xs text-text-secondary mb-1 block">
-                  Model
+                  {t('newTaskDialog.model')}
                 </label>
                 <div className="flex gap-1.5">
                   {MODELS.map((m) => (
@@ -192,14 +194,14 @@ export default function NewTaskDialog({ open, onClose, onSubmit, initialGoal }: 
                           : 'bg-bg-secondary border-border-subtle text-text-secondary hover:text-text-primary hover:border-border-default',
                       )}
                     >
-                      {m.label}
+                      {t(m.key)}
                     </button>
                   ))}
                 </div>
               </div>
               <div>
                 <label className="text-xs text-text-secondary mb-1 block">
-                  Max phases: {maxPhases}
+                  {t('newTaskDialog.maxPhases', { value: maxPhases })}
                 </label>
                 <input
                   type="range"
@@ -212,7 +214,7 @@ export default function NewTaskDialog({ open, onClose, onSubmit, initialGoal }: 
               </div>
               <div>
                 <label className="text-xs text-text-secondary mb-1 block">
-                  Max turns: {maxTurns}
+                  {t('newTaskDialog.maxTurns', { value: maxTurns })}
                 </label>
                 <input
                   type="range"
@@ -234,14 +236,14 @@ export default function NewTaskDialog({ open, onClose, onSubmit, initialGoal }: 
             onClick={onClose}
             className="px-3 py-1.5 text-sm rounded-md text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             disabled={!goal.trim()}
             className="px-4 py-1.5 text-sm rounded-md bg-accent text-white font-medium hover:bg-accent/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
           >
-            Start Task
+            {t('newTaskDialog.startTask')}
           </button>
         </div>
       </div>

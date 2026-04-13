@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Brain,
   Save,
@@ -23,6 +24,7 @@ interface ExpertProposalCardProps {
 }
 
 function StatusBadge({ status }: { status: ExpertProposal['status'] }) {
+  const { t } = useTranslation();
   const styles = {
     proposed: 'bg-cyan-500/15 text-cyan-400',
     previewing: 'bg-yellow-500/15 text-yellow-400',
@@ -30,10 +32,10 @@ function StatusBadge({ status }: { status: ExpertProposal['status'] }) {
     dismissed: 'bg-zinc-500/15 text-zinc-400',
   };
   const labels = {
-    proposed: 'Proposed',
-    previewing: 'Reviewing',
-    saved: 'Saved',
-    dismissed: 'Dismissed',
+    proposed: t('status.proposed'),
+    previewing: t('status.reviewing'),
+    saved: t('status.saved'),
+    dismissed: t('status.dismissed'),
   };
 
   return (
@@ -48,6 +50,7 @@ export default function ExpertProposalCard({
   messageId,
   conversationId,
 }: ExpertProposalCardProps) {
+  const { t } = useTranslation();
   const { updateMessage } = useChat();
   const { createExpert } = useExperts();
   const [isSaving, setIsSaving] = useState(false);
@@ -163,13 +166,13 @@ export default function ExpertProposalCard({
           {proposal.toolAccess.length > 0 && (
             <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
               <Wrench size={10} />
-              {proposal.toolAccess.length} tool{proposal.toolAccess.length !== 1 && 's'}
+              {t('expertProposal.tool', { count: proposal.toolAccess.length })}
             </span>
           )}
           {proposal.suggestedContextFile && (
             <span className="flex items-center gap-1 text-[10px] text-text-tertiary">
               <FileText size={10} />
-              Context file included
+              {t('expertProposal.contextFileIncluded')}
             </span>
           )}
         </div>
@@ -205,7 +208,7 @@ export default function ExpertProposalCard({
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-bg-hover/50 text-text-secondary hover:bg-bg-hover transition-colors cursor-pointer"
           >
             {isPromptExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-            {isPromptExpanded ? 'Collapse' : 'Preview'}
+            {isPromptExpanded ? t('expertProposal.collapse') : t('expertProposal.preview')}
           </button>
           <button
             onClick={handleSave}
@@ -213,14 +216,14 @@ export default function ExpertProposalCard({
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 transition-colors cursor-pointer disabled:opacity-50"
           >
             <Save size={11} />
-            Save Expert
+            {t('expertProposal.saveExpert')}
           </button>
           <button
             onClick={handleDismiss}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-text-tertiary hover:text-text-secondary hover:bg-bg-hover/50 transition-colors cursor-pointer ml-auto"
           >
             <X size={11} />
-            Dismiss
+            {t('common.dismiss')}
           </button>
         </div>
       )}
@@ -229,7 +232,7 @@ export default function ExpertProposalCard({
         <div className="border-t border-border-subtle px-3 py-2">
           <span className="flex items-center gap-1.5 text-[11px] text-green-400 font-medium">
             <CheckCircle2 size={12} />
-            Saved as expert
+            {t('expertProposal.savedAsExpert')}
           </span>
         </div>
       )}

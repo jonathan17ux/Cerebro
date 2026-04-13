@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Trash2, Square } from 'lucide-react';
 import clsx from 'clsx';
 import { useTasks } from '../../../context/TaskContext';
@@ -19,6 +20,7 @@ interface TaskDetailPanelProps {
 type TabId = 'plan' | 'console' | 'deliverable' | 'workspace' | 'preview';
 
 export default function TaskDetailPanel({ taskId }: TaskDetailPanelProps) {
+  const { t } = useTranslation();
   const { tasks, liveTask, cancelTask, deleteTask, watchTask, unwatchTask, refresh } = useTasks();
   const [detail, setDetail] = useState<TaskDetail | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('plan');
@@ -80,12 +82,12 @@ export default function TaskDetailPanel({ taskId }: TaskDetailPanelProps) {
 
   const hasWorkspace = task.deliverable_kind === 'code_app' || task.deliverable_kind === 'mixed';
   const tabs: Array<{ id: TabId; label: string }> = [
-    { id: 'plan', label: 'Plan' },
-    { id: 'console', label: 'Console' },
-    { id: 'deliverable', label: 'Deliverable' },
+    { id: 'plan', label: t('taskDetail.tabPlan') },
+    { id: 'console', label: t('taskDetail.tabConsole') },
+    { id: 'deliverable', label: t('taskDetail.tabDeliverable') },
     ...(hasWorkspace ? [
-      { id: 'workspace' as const, label: 'Workspace' },
-      { id: 'preview' as const, label: 'Preview' },
+      { id: 'workspace' as const, label: t('taskDetail.tabWorkspace') },
+      { id: 'preview' as const, label: t('taskDetail.tabPreview') },
     ] : []),
   ];
 

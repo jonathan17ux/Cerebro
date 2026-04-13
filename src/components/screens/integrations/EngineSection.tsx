@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Cpu, CheckCircle2, XCircle, Loader2, ExternalLink, RefreshCw } from 'lucide-react';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
 import { useProviders } from '../../../context/ProviderContext';
 
 export default function EngineSection() {
+  const { t } = useTranslation();
   const { claudeCodeInfo, refreshClaudeCodeStatus } = useProviders();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -24,10 +26,9 @@ export default function EngineSection() {
 
   return (
     <div>
-      <h2 className="text-lg font-medium text-text-primary">Engine</h2>
+      <h2 className="text-lg font-medium text-text-primary">{t('engineSection.title')}</h2>
       <p className="text-sm text-text-secondary mt-1 leading-relaxed">
-        Cerebro uses the Claude Code CLI as its inference engine. All experts, routines,
-        and conversations are powered by Claude Code subagents.
+        {t('engineSection.description')}
       </p>
 
       <div className="mt-6 bg-bg-surface border border-border-subtle rounded-lg overflow-hidden">
@@ -37,29 +38,29 @@ export default function EngineSection() {
             <Cpu size={16} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-text-primary">Claude Code</div>
+            <div className="text-sm font-medium text-text-primary">{t('engineSection.claudeCode')}</div>
             <div className="text-xs text-text-secondary">
-              Anthropic's official CLI for Claude
+              {t('engineSection.claudeCodeDesc')}
             </div>
           </div>
           <div className="flex items-center gap-2">
             {isAvailable && (
               <>
                 <CheckCircle2 size={14} className="text-emerald-400" />
-                <span className="text-xs text-emerald-400">Detected</span>
+                <span className="text-xs text-emerald-400">{t('engineSection.detected')}</span>
               </>
             )}
             {isDetecting && (
               <>
                 <Loader2 size={14} className="text-amber-400 animate-spin" />
-                <span className="text-xs text-amber-400">Detecting…</span>
+                <span className="text-xs text-amber-400">{t('engineSection.detecting')}</span>
               </>
             )}
             {(isUnavailable || isError) && (
               <>
                 <XCircle size={14} className="text-red-400" />
                 <span className="text-xs text-red-400">
-                  {isUnavailable ? 'Not found' : 'Error'}
+                  {isUnavailable ? t('engineSection.notFound') : t('engineSection.error')}
                 </span>
               </>
             )}
@@ -74,7 +75,7 @@ export default function EngineSection() {
             <>
               {claudeCodeInfo.version && (
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-text-tertiary">Version</span>
+                  <span className="text-text-tertiary">{t('engineSection.version')}</span>
                   <code className="text-text-secondary font-mono">
                     v{claudeCodeInfo.version}
                   </code>
@@ -82,7 +83,7 @@ export default function EngineSection() {
               )}
               {claudeCodeInfo.path && (
                 <div className="flex items-center justify-between gap-3 text-xs">
-                  <span className="text-text-tertiary flex-shrink-0">Path</span>
+                  <span className="text-text-tertiary flex-shrink-0">{t('engineSection.path')}</span>
                   <code className="text-text-secondary font-mono truncate">
                     {claudeCodeInfo.path}
                   </code>
@@ -94,23 +95,23 @@ export default function EngineSection() {
           {(isUnavailable || isError) && (
             <div className="text-xs text-text-secondary leading-relaxed">
               <p className="mb-2">
-                Cerebro could not find the Claude Code CLI on your system.{' '}
+                {t('engineSection.notFoundMessage')}{' '}
                 {claudeCodeInfo.error && (
-                  <span className="text-red-400">({claudeCodeInfo.error})</span>
+                  <span className="text-red-400">{t('engineSection.notFoundError', { error: claudeCodeInfo.error })}</span>
                 )}
               </p>
               <p>
-                Install it from{' '}
+                {t('engineSection.installGuide')}{' '}
                 <a
                   href="https://docs.claude.com/en/docs/claude-code/setup"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-accent hover:underline inline-flex items-center gap-1"
                 >
-                  the official setup guide
+                  {t('engineSection.installGuideLink')}
                   <ExternalLink size={10} />
                 </a>{' '}
-                and click Re-detect once installed.
+                {t('engineSection.installGuideAfter')}
               </p>
             </div>
           )}
@@ -127,7 +128,7 @@ export default function EngineSection() {
               )}
             >
               <RefreshCw size={11} className={clsx(refreshing && 'animate-spin')} />
-              {refreshing ? 'Detecting…' : 'Re-detect'}
+              {refreshing ? t('engineSection.detecting') : t('engineSection.redetect')}
             </button>
           </div>
         </div>

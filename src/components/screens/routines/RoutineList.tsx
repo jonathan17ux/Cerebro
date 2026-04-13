@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus, Loader2, Search, RefreshCw, AlertCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { useRoutines } from '../../../context/RoutineContext';
@@ -10,6 +11,7 @@ import AlertModal from '../../ui/AlertModal';
 type Filter = 'all' | 'enabled' | 'scheduled' | 'manual';
 
 export default function RoutineList() {
+  const { t } = useTranslation();
   const {
     routines,
     isLoading,
@@ -99,7 +101,7 @@ export default function RoutineList() {
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-accent bg-accent/10 hover:bg-accent/20 border border-accent/20 rounded-lg transition-colors"
         >
           <RefreshCw size={14} />
-          Retry
+          {t('common.retry')}
         </button>
       </div>
     );
@@ -111,14 +113,14 @@ export default function RoutineList() {
       <div className="flex-shrink-0 px-6 pt-5 pb-4 border-b border-border-subtle">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold text-text-primary">Routines</h1>
+            <h1 className="text-lg font-semibold text-text-primary">{t('routines.title')}</h1>
             <div className="flex items-center gap-1.5">
               <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-bg-elevated text-text-tertiary border border-border-subtle">
-                {routines.length} total
+                {t('routines.total', { count: routines.length })}
               </span>
               {enabledCount > 0 && (
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/10 text-green-400 border border-green-500/20">
-                  {enabledCount} active
+                  {t('routines.active', { count: enabledCount })}
                 </span>
               )}
             </div>
@@ -129,7 +131,7 @@ export default function RoutineList() {
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-bg-base bg-accent hover:bg-accent-hover rounded-lg transition-colors"
           >
             <Plus size={14} />
-            New Routine
+            {t('routines.newRoutine')}
           </button>
         </div>
 
@@ -137,10 +139,10 @@ export default function RoutineList() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             {([
-              { key: 'all' as const, label: 'All', count: routines.length },
-              { key: 'enabled' as const, label: 'Enabled', count: enabledCount },
-              { key: 'scheduled' as const, label: 'Scheduled', count: cronCount },
-              { key: 'manual' as const, label: 'Manual', count: manualCount },
+              { key: 'all' as const, labelKey: 'routines.filterAll', count: routines.length },
+              { key: 'enabled' as const, labelKey: 'routines.filterEnabled', count: enabledCount },
+              { key: 'scheduled' as const, labelKey: 'routines.filterScheduled', count: cronCount },
+              { key: 'manual' as const, labelKey: 'routines.filterManual', count: manualCount },
             ]).map((pill) => (
               <button
                 key={pill.key}
@@ -152,7 +154,7 @@ export default function RoutineList() {
                     : 'bg-bg-surface/80 text-text-tertiary border border-transparent hover:text-text-secondary hover:bg-bg-hover',
                 )}
               >
-                {pill.label} ({pill.count})
+                {t(pill.labelKey)} ({pill.count})
               </button>
             ))}
           </div>
@@ -168,7 +170,7 @@ export default function RoutineList() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search..."
+              placeholder={t('common.search')}
               className="w-48 bg-bg-surface border border-border-subtle rounded-lg pl-8 pr-3 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/30 transition-colors"
             />
           </div>
@@ -183,23 +185,23 @@ export default function RoutineList() {
               <RefreshCw size={24} className="text-text-tertiary" />
             </div>
             <h3 className="text-sm font-medium text-text-primary mb-1.5">
-              No routines yet
+              {t('routines.noRoutinesYet')}
             </h3>
             <p className="text-xs text-text-tertiary mb-4 max-w-[240px] text-center">
-              Routines automate multi-step tasks. Create your first routine to get started.
+              {t('routines.noRoutinesDescription')}
             </p>
             <button
               onClick={() => setShowCreate(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-bg-base bg-accent hover:bg-accent-hover rounded-lg transition-colors"
             >
               <Plus size={14} />
-              Create your first routine
+              {t('routines.createFirst')}
             </button>
           </div>
         ) : filteredRoutines.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <p className="text-xs text-text-tertiary">
-              No routines match your {search ? 'search' : 'filter'}.
+              {search ? t('routines.noMatchSearch') : t('routines.noMatchFilter')}
             </p>
           </div>
         ) : (
@@ -229,13 +231,13 @@ export default function RoutineList() {
       {/* Delete Confirm Dialog */}
       {deleteTarget && (
         <AlertModal
-          title="Delete routine"
-          message={`Delete "${deleteTarget.name}"? This cannot be undone.`}
+          title={t('routines.deleteRoutine')}
+          message={t('routines.deleteConfirm', { name: deleteTarget.name })}
           onClose={() => setDeleteTarget(null)}
           actions={[
-            { label: 'Cancel', onClick: () => setDeleteTarget(null) },
+            { label: t('common.cancel'), onClick: () => setDeleteTarget(null) },
             {
-              label: 'Delete',
+              label: t('common.delete'),
               primary: true,
               variant: 'danger',
               onClick: () => {

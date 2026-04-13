@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Activity, Loader2, AlertCircle, RefreshCw, MessageSquare } from 'lucide-react';
 import clsx from 'clsx';
 import type { BackendResponse } from '../../types/ipc';
@@ -18,29 +19,14 @@ type StatusFilter = (typeof STATUS_FILTERS)[number];
 type TypeFilter = (typeof TYPE_FILTERS)[number];
 type TriggerFilter = (typeof TRIGGER_FILTERS)[number];
 
-const FILTER_LABELS: Record<string, string> = {
-  all: 'All',
-  running: 'Running',
-  paused: 'Paused',
-  completed: 'Completed',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
-  routine: 'Routine',
-  preview: 'Preview',
-  ad_hoc: 'Ad-Hoc',
-  orchestration: 'Orchestration',
-  task: 'Task',
-  manual: 'Manual',
-  scheduled: 'Scheduled',
-  chat: 'Chat',
-  webhook: 'Webhook',
-};
+// Filter labels resolved via i18n at render time using `activity.filter.${key}`
 
 const PAGE_SIZE = 30;
 
 // ── Component ──────────────────────────────────────────────────
 
 export default function ActivityScreen() {
+  const { t } = useTranslation();
   const { routines, loadRoutines } = useRoutines();
   const { setActiveScreen } = useChat();
 
@@ -166,7 +152,7 @@ export default function ActivityScreen() {
               : 'bg-bg-surface/80 text-text-tertiary border border-transparent hover:text-text-secondary hover:bg-bg-hover',
           )}
         >
-          {FILTER_LABELS[f] ?? f}
+          {t(`activity.filter.${f}`)}
         </button>
       ))}
     </div>
@@ -194,7 +180,7 @@ export default function ActivityScreen() {
           <AlertCircle size={24} className="text-red-400" />
         </div>
         <h3 className="text-sm font-medium text-text-primary mb-1.5">
-          Failed to load activity
+          {t('activity.failedToLoad')}
         </h3>
         <p className="text-xs text-text-tertiary mb-4 max-w-[280px] text-center">
           {loadError}
@@ -207,7 +193,7 @@ export default function ActivityScreen() {
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-accent bg-accent/10 hover:bg-accent/20 border border-accent/20 rounded-lg transition-colors"
         >
           <RefreshCw size={14} />
-          Retry
+          {t('common.retry')}
         </button>
       </div>
     );
@@ -218,9 +204,9 @@ export default function ActivityScreen() {
       {/* Header */}
       <div className="flex-shrink-0 px-6 pt-5 pb-4 border-b border-border-subtle">
         <div className="flex items-center gap-3 mb-4">
-          <h1 className="text-lg font-semibold text-text-primary">Activity</h1>
+          <h1 className="text-lg font-semibold text-text-primary">{t('activity.title')}</h1>
           <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-bg-elevated text-text-tertiary border border-border-subtle">
-            {total} total
+            {t('activity.total', { count: total })}
           </span>
         </div>
 
@@ -243,23 +229,23 @@ export default function ActivityScreen() {
               <Activity size={24} className="text-text-tertiary" />
             </div>
             <h3 className="text-sm font-medium text-text-primary mb-1.5">
-              No activity yet
+              {t('activity.noActivityYet')}
             </h3>
             <p className="text-xs text-text-secondary mb-4 max-w-[280px] text-center">
-              Your activity timeline will show routine runs, delegations, and orchestrations as they happen.
+              {t('activity.noActivityDescription')}
             </p>
             <button
               onClick={() => setActiveScreen('chat')}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-bg-base bg-accent hover:bg-accent-hover rounded-lg transition-colors"
             >
               <MessageSquare size={14} />
-              Start a conversation
+              {t('activity.startConversation')}
             </button>
           </div>
         ) : runs.length === 0 ? (
           /* No filter match */
           <div className="flex flex-col items-center justify-center py-20">
-            <p className="text-xs text-text-tertiary">No runs match your filters.</p>
+            <p className="text-xs text-text-tertiary">{t('activity.noMatchFilters')}</p>
           </div>
         ) : (
           /* Run list */
@@ -287,7 +273,7 @@ export default function ActivityScreen() {
                   {isLoadingMore ? (
                     <Loader2 size={14} className="animate-spin" />
                   ) : (
-                    <>Load more ({total - runs.length} remaining)</>
+                    <>{t('activity.loadMore', { count: total - runs.length })}</>
                   )}
                 </button>
               </div>

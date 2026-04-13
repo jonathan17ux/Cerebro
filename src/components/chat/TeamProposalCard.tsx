@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Users,
   Save,
@@ -23,6 +24,7 @@ interface TeamProposalCardProps {
 }
 
 function StatusBadge({ status }: { status: TeamProposal['status'] }) {
+  const { t } = useTranslation();
   const styles = {
     proposed: 'bg-cyan-500/15 text-cyan-400',
     previewing: 'bg-yellow-500/15 text-yellow-400',
@@ -30,10 +32,10 @@ function StatusBadge({ status }: { status: TeamProposal['status'] }) {
     dismissed: 'bg-zinc-500/15 text-zinc-400',
   };
   const labels = {
-    proposed: 'Proposed',
-    previewing: 'Reviewing',
-    saved: 'Saved',
-    dismissed: 'Dismissed',
+    proposed: t('status.proposed'),
+    previewing: t('status.reviewing'),
+    saved: t('status.saved'),
+    dismissed: t('status.dismissed'),
   };
 
   return (
@@ -56,6 +58,7 @@ export default function TeamProposalCard({
   messageId,
   conversationId,
 }: TeamProposalCardProps) {
+  const { t } = useTranslation();
   const { updateMessage } = useChat();
   const { createExpert } = useExperts();
   const [isSaving, setIsSaving] = useState(false);
@@ -187,7 +190,7 @@ export default function TeamProposalCard({
       {!isCollapsed && (
         <div className="border-t border-border-subtle px-3 py-1.5">
           <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1">
-            Members ({proposal.members.length})
+            {t('teamProposal.members', { count: proposal.members.length })}
           </div>
           <div className="space-y-1">
             {proposal.members.map((member, i) => (
@@ -202,7 +205,7 @@ export default function TeamProposalCard({
                 </span>
                 <span className="text-text-tertiary">({member.role})</span>
                 {!member.expertId && (
-                  <span className="text-[9px] text-purple-400 font-medium">NEW</span>
+                  <span className="text-[9px] text-purple-400 font-medium">{t('common.new')}</span>
                 )}
               </div>
             ))}
@@ -214,7 +217,7 @@ export default function TeamProposalCard({
       {!isCollapsed && isExpanded && proposal.coordinatorPrompt && (
         <div className="border-t border-border-subtle px-3 py-2">
           <div className="text-[10px] uppercase tracking-wider text-text-tertiary mb-1">
-            Coordinator Prompt
+            {t('teamProposal.coordinatorPrompt')}
           </div>
           <div className="text-[11px] text-text-tertiary font-mono leading-relaxed whitespace-pre-wrap">
             {proposal.coordinatorPrompt}
@@ -239,7 +242,7 @@ export default function TeamProposalCard({
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-bg-hover/50 text-text-secondary hover:bg-bg-hover transition-colors cursor-pointer"
             >
               {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-              {isExpanded ? 'Collapse' : 'Details'}
+              {isExpanded ? t('expertProposal.collapse') : t('teamProposal.details')}
             </button>
           )}
           <button
@@ -248,14 +251,14 @@ export default function TeamProposalCard({
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25 transition-colors cursor-pointer disabled:opacity-50"
           >
             <Save size={11} />
-            {isSaving ? 'Saving...' : 'Save Team'}
+            {isSaving ? t('common.saving') : t('teamProposal.saveTeam')}
           </button>
           <button
             onClick={handleDismiss}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium text-text-tertiary hover:text-text-secondary hover:bg-bg-hover/50 transition-colors cursor-pointer ml-auto"
           >
             <X size={11} />
-            Dismiss
+            {t('common.dismiss')}
           </button>
         </div>
       )}
@@ -264,7 +267,7 @@ export default function TeamProposalCard({
         <div className="border-t border-border-subtle px-3 py-2">
           <span className="flex items-center gap-1.5 text-[11px] text-green-400 font-medium">
             <CheckCircle2 size={12} />
-            Saved as team
+            {t('teamProposal.savedAsTeam')}
           </span>
         </div>
       )}

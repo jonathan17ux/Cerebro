@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   Play,
@@ -24,10 +25,10 @@ import { cronToSchedule, scheduleToCron, describeSchedule, WEEKDAYS } from '../.
 
 // ── Helpers ────────────────────────────────────────────────────
 
-const TRIGGER_OPTIONS: { value: TriggerType; label: string; icon: typeof Hand }[] = [
-  { value: 'manual', label: 'Manual', icon: Hand },
-  { value: 'cron', label: 'Scheduled', icon: Clock },
-  { value: 'webhook', label: 'Webhook', icon: Webhook },
+const TRIGGER_OPTIONS: { value: TriggerType; labelKey: string; icon: typeof Hand }[] = [
+  { value: 'manual', labelKey: 'triggers.manual', icon: Hand },
+  { value: 'cron', labelKey: 'triggers.scheduled', icon: Clock },
+  { value: 'webhook', labelKey: 'triggers.webhook', icon: Webhook },
 ];
 
 // ── Component ──────────────────────────────────────────────────
@@ -49,6 +50,7 @@ export default function EditorToolbar({
   onSave,
   onAutoLayout,
 }: EditorToolbarProps) {
+  const { t } = useTranslation();
   const { setEditingRoutineId, updateRoutine, deleteRoutine, toggleEnabled, runRoutine } =
     useRoutines();
 
@@ -161,7 +163,7 @@ export default function EditorToolbar({
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-bg-elevated text-text-secondary border border-border-subtle hover:border-border-default transition-colors"
         >
           <TriggerIcon size={11} />
-          {currentTrigger.label}
+          {t(currentTrigger.labelKey)}
         </button>
 
         {showTriggerMenu && (
@@ -180,7 +182,7 @@ export default function EditorToolbar({
                   )}
                 >
                   <OptIcon size={12} />
-                  {opt.label}
+                  {t(opt.labelKey)}
                 </button>
               );
             })}
@@ -197,7 +199,7 @@ export default function EditorToolbar({
           >
             {existingSchedule
               ? describeSchedule({ days: scheduleDays, time: scheduleTime })
-              : 'Set schedule'}
+              : t('routineEditor.setSchedule')}
           </button>
 
           {showSchedulePicker && (
@@ -278,7 +280,7 @@ export default function EditorToolbar({
         <button
           onClick={() => runRoutine(routine.id)}
           disabled={!routine.isEnabled || !routine.dagJson || saveStatus === 'saving'}
-          title={saveStatus === 'saving' ? 'Saving in progress...' : undefined}
+          title={saveStatus === 'saving' ? t('routineEditor.savingInProgress') : undefined}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-bg-elevated text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
           <Play size={13} />
@@ -293,9 +295,9 @@ export default function EditorToolbar({
           message={`Delete "${routine.name}"? This cannot be undone.`}
           onClose={() => setShowDeleteConfirm(false)}
           actions={[
-            { label: 'Cancel', onClick: () => setShowDeleteConfirm(false) },
+            { label: t('common.cancel'), onClick: () => setShowDeleteConfirm(false) },
             {
-              label: 'Delete',
+              label: t('common.delete'),
               primary: true,
               variant: 'danger',
               onClick: () => {

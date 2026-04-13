@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
 import clsx from 'clsx';
 import { useTasks } from '../../context/TaskContext';
@@ -8,14 +9,15 @@ import TaskEmptyState from './tasks/TaskEmptyState';
 import NewTaskDialog from './tasks/NewTaskDialog';
 import type { TaskStatus } from './tasks/types';
 
-const STATUS_FILTERS: Array<{ label: string; value: TaskStatus | 'all' }> = [
-  { label: 'All', value: 'all' },
-  { label: 'Running', value: 'running' },
-  { label: 'Done', value: 'completed' },
-  { label: 'Failed', value: 'failed' },
+const STATUS_FILTERS: Array<{ key: string; value: TaskStatus | 'all' }> = [
+  { key: 'tasks.filterAll', value: 'all' },
+  { key: 'tasks.filterRunning', value: 'running' },
+  { key: 'tasks.filterDone', value: 'completed' },
+  { key: 'tasks.filterFailed', value: 'failed' },
 ];
 
 export default function TasksScreen() {
+  const { t } = useTranslation();
   const {
     tasks,
     selectedTaskId,
@@ -80,11 +82,11 @@ export default function TasksScreen() {
       <div className="w-[340px] flex-shrink-0 border-r border-border-subtle flex flex-col">
         {/* Header */}
         <div className="px-4 pt-3 pb-2 flex items-center justify-between">
-          <h1 className="text-base font-semibold text-text-primary">Tasks</h1>
+          <h1 className="text-base font-semibold text-text-primary">{t('tasks.title')}</h1>
           <button
             onClick={handleNewTask}
             className="p-1.5 rounded-md bg-accent/10 hover:bg-accent/20 text-accent transition-colors cursor-pointer"
-            title="New task"
+            title={t('tasks.newTask')}
           >
             <Plus size={16} />
           </button>
@@ -103,7 +105,7 @@ export default function TasksScreen() {
                   : 'text-text-tertiary hover:text-text-secondary',
               )}
             >
-              {f.label}
+              {t(f.key)}
             </button>
           ))}
         </div>
@@ -112,7 +114,7 @@ export default function TasksScreen() {
         <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
           {filteredTasks.length === 0 ? (
             <p className="text-xs text-text-tertiary text-center mt-8">
-              {statusFilter === 'all' ? 'No tasks yet' : `No ${statusFilter} tasks`}
+              {statusFilter === 'all' ? t('tasks.noTasksYet') : t('tasks.noFilteredTasks', { status: statusFilter })}
             </p>
           ) : (
             filteredTasks.map((task) => (

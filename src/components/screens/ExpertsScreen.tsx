@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus, ZoomIn, ZoomOut, Maximize2, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useExperts, type Expert, type CreateExpertInput } from '../../context/ExpertContext';
@@ -164,6 +165,7 @@ function computeLayout(experts: Expert[]) {
 // ── ExpertsScreen ──────────────────────────────────────────────
 
 export default function ExpertsScreen() {
+  const { t } = useTranslation();
   const {
     experts,
     isLoading,
@@ -460,7 +462,7 @@ export default function ExpertsScreen() {
                 />
               </div>
               <span className="text-[11px] text-text-tertiary mt-2 group-hover:text-text-secondary transition-colors">
-                Add Expert
+                {t('experts.addExpert')}
               </span>
             </div>
           )}
@@ -470,10 +472,10 @@ export default function ExpertsScreen() {
       {/* ─── Top-left filter pills ─── */}
       <div className="canvas-toolbar absolute top-4 left-4 flex items-center gap-1.5">
         {([
-          { key: 'all' as const, label: 'All', count: experts.length },
-          { key: 'active' as const, label: 'Active', count: activeCount },
-          { key: 'disabled' as const, label: 'Disabled', count: disabledCount },
-          { key: 'pinned' as const, label: 'Pinned', count: pinnedCount },
+          { key: 'all' as const, labelKey: 'experts.filterAll', count: experts.length },
+          { key: 'active' as const, labelKey: 'experts.filterActive', count: activeCount },
+          { key: 'disabled' as const, labelKey: 'experts.filterDisabled', count: disabledCount },
+          { key: 'pinned' as const, labelKey: 'experts.filterPinned', count: pinnedCount },
         ]).map((pill) => (
           <button
             key={pill.key}
@@ -485,7 +487,7 @@ export default function ExpertsScreen() {
                 : 'bg-bg-surface/80 text-text-tertiary border border-transparent hover:text-text-secondary hover:bg-bg-hover',
             )}
           >
-            {pill.label} ({pill.count})
+            {t(pill.labelKey)} ({pill.count})
           </button>
         ))}
       </div>
@@ -497,7 +499,7 @@ export default function ExpertsScreen() {
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-bg-base bg-accent hover:bg-accent-hover rounded-lg transition-colors"
         >
           <Plus size={14} />
-          New Expert
+          {t('experts.newExpert')}
         </button>
       </div>
 
@@ -506,7 +508,7 @@ export default function ExpertsScreen() {
         <button
           onClick={zoomOut}
           className="p-1.5 rounded hover:bg-bg-hover transition-colors text-text-tertiary hover:text-text-secondary"
-          title="Zoom out"
+          title={t('experts.zoomOut')}
         >
           <ZoomOut size={14} />
         </button>
@@ -516,7 +518,7 @@ export default function ExpertsScreen() {
         <button
           onClick={zoomIn}
           className="p-1.5 rounded hover:bg-bg-hover transition-colors text-text-tertiary hover:text-text-secondary"
-          title="Zoom in"
+          title={t('experts.zoomIn')}
         >
           <ZoomIn size={14} />
         </button>
@@ -524,7 +526,7 @@ export default function ExpertsScreen() {
         <button
           onClick={resetView}
           className="p-1.5 rounded hover:bg-bg-hover transition-colors text-text-tertiary hover:text-text-secondary"
-          title="Reset view"
+          title={t('experts.resetView')}
         >
           <Maximize2 size={14} />
         </button>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Users,
   ChevronRight,
@@ -30,15 +31,16 @@ function StrategyBadge({ strategy }: { strategy: string }) {
 }
 
 function RunStatusBadge({ status }: { status: TeamRun['status'] }) {
+  const { t } = useTranslation();
   const styles = {
     running: 'bg-yellow-500/15 text-yellow-400',
     completed: 'bg-green-500/15 text-green-400',
     error: 'bg-red-500/15 text-red-400',
   };
   const labels = {
-    running: 'Running',
-    completed: 'Completed',
-    error: 'Failed',
+    running: t('status.running'),
+    completed: t('status.completed'),
+    error: t('status.failed'),
   };
   return (
     <span className={clsx('text-[10px] font-medium px-1.5 py-0.5 rounded-full', styles[status])}>
@@ -48,6 +50,7 @@ function RunStatusBadge({ status }: { status: TeamRun['status'] }) {
 }
 
 export default function TeamRunCard({ teamRun }: TeamRunCardProps) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [expandedMember, setExpandedMember] = useState<string | null>(null);
   const isRunning = teamRun.status === 'running';
@@ -125,7 +128,7 @@ export default function TeamRunCard({ teamRun }: TeamRunCardProps) {
       {teamRun.status !== 'running' && teamRun.successCount !== undefined && (
         <div className="border-t border-border-subtle px-3 py-1.5">
           <span className="text-[10px] text-text-tertiary">
-            {teamRun.successCount}/{teamRun.totalCount} completed
+            {t('teamRun.completedProgress', { done: teamRun.successCount, total: teamRun.totalCount })}
           </span>
         </div>
       )}

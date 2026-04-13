@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ShieldCheck, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useApprovals } from '../../context/ApprovalContext';
@@ -8,6 +9,7 @@ import ApprovalCard from './approvals/ApprovalCard';
 type Tab = 'pending' | 'history';
 
 export default function ApprovalsScreen() {
+  const { t } = useTranslation();
   const { pendingApprovals, approve, deny, refresh } = useApprovals();
 
   const [activeTab, setActiveTab] = useState<Tab>('pending');
@@ -67,8 +69,8 @@ export default function ApprovalsScreen() {
             <ShieldCheck size={18} className="text-accent" />
           </div>
           <div>
-            <h1 className="text-[18px] font-semibold text-text-primary leading-tight">Approvals</h1>
-            <p className="text-[12px] text-text-secondary mt-0.5">Review and approve pending actions</p>
+            <h1 className="text-[18px] font-semibold text-text-primary leading-tight">{t('approvals.title')}</h1>
+            <p className="text-[12px] text-text-secondary mt-0.5">{t('approvals.subtitle')}</p>
           </div>
         </div>
 
@@ -85,7 +87,9 @@ export default function ApprovalsScreen() {
                   : 'text-text-tertiary border-transparent hover:text-text-secondary',
               )}
             >
-              {tab === 'pending' ? `Pending${pendingApprovals.length > 0 ? ` (${pendingApprovals.length})` : ''}` : 'History'}
+              {tab === 'pending'
+                ? (pendingApprovals.length > 0 ? t('approvals.pendingTabCount', { count: pendingApprovals.length }) : t('approvals.pendingTab'))
+                : t('approvals.historyTab')}
             </button>
           ))}
         </div>
@@ -99,9 +103,9 @@ export default function ApprovalsScreen() {
               <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-white/[0.03] mb-4">
                 <ShieldCheck size={24} className="text-text-tertiary" />
               </div>
-              <h2 className="text-[15px] font-medium text-text-secondary mb-1">No pending approvals</h2>
+              <h2 className="text-[15px] font-medium text-text-secondary mb-1">{t('approvals.noPending')}</h2>
               <p className="text-[12px] text-text-secondary max-w-xs">
-                When a routine step requires your sign-off, it will appear here.
+                {t('approvals.noPendingDescription')}
               </p>
             </div>
           ) : (
@@ -127,9 +131,9 @@ export default function ApprovalsScreen() {
               <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-white/[0.03] mb-4">
                 <ShieldCheck size={24} className="text-text-tertiary" />
               </div>
-              <h2 className="text-[15px] font-medium text-text-secondary mb-1">No approval history yet</h2>
+              <h2 className="text-[15px] font-medium text-text-secondary mb-1">{t('approvals.noHistory')}</h2>
               <p className="text-[12px] text-text-tertiary max-w-xs">
-                Resolved approvals will appear here.
+                {t('approvals.noHistoryDescription')}
               </p>
             </div>
           ) : (

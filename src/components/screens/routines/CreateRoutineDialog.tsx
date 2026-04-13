@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Hand, Clock, Webhook } from 'lucide-react';
 import clsx from 'clsx';
 import type { CreateRoutineInput, TriggerType } from '../../../types/routines';
@@ -17,6 +18,7 @@ export default function CreateRoutineDialog({
   onClose,
   onCreate,
 }: CreateRoutineDialogProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [triggerType, setTriggerType] = useState<TriggerType>('manual');
@@ -64,9 +66,9 @@ export default function CreateRoutineDialog({
   };
 
   const triggers: Array<{ type: TriggerType; icon: typeof Hand; label: string; desc: string }> = [
-    { type: 'manual', icon: Hand, label: 'Manual', desc: 'Run on demand' },
-    { type: 'cron', icon: Clock, label: 'Scheduled', desc: 'Run on a schedule' },
-    { type: 'webhook', icon: Webhook, label: 'Webhook', desc: 'Run via webhook' },
+    { type: 'manual', icon: Hand, label: t('triggers.manual'), desc: t('createRoutine.triggerManualDesc') },
+    { type: 'cron', icon: Clock, label: t('triggers.scheduled'), desc: t('createRoutine.triggerScheduledDesc') },
+    { type: 'webhook', icon: Webhook, label: t('triggers.webhook'), desc: t('createRoutine.triggerWebhookDesc') },
   ];
 
   return (
@@ -77,7 +79,7 @@ export default function CreateRoutineDialog({
       <div className="bg-bg-elevated rounded-xl border border-border-subtle p-6 w-full max-w-md animate-fade-in">
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-base font-medium text-text-primary">New Routine</h3>
+          <h3 className="text-base font-medium text-text-primary">{t('createRoutine.title')}</h3>
           <button
             onClick={onClose}
             className="p-1 rounded-md text-text-tertiary hover:text-text-secondary hover:bg-bg-hover transition-colors"
@@ -90,14 +92,14 @@ export default function CreateRoutineDialog({
           {/* Name */}
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Name
+              {t('createRoutine.name')}
             </label>
             <input
               ref={nameRef}
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Daily Standup Summary"
+              placeholder={t('createRoutine.namePlaceholder')}
               className="w-full bg-bg-surface border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 transition-colors"
             />
           </div>
@@ -105,13 +107,13 @@ export default function CreateRoutineDialog({
           {/* Description */}
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Description{' '}
-              <span className="text-text-tertiary font-normal">(optional)</span>
+              {t('createRoutine.description')}{' '}
+              <span className="text-text-tertiary font-normal">{t('common.optional')}</span>
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="What does this routine do?"
+              placeholder={t('createRoutine.descPlaceholder')}
               rows={2}
               className="w-full bg-bg-surface border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 transition-colors resize-none"
             />
@@ -120,7 +122,7 @@ export default function CreateRoutineDialog({
           {/* Trigger Type */}
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Trigger
+              {t('createRoutine.trigger')}
             </label>
             <div className="flex gap-2">
               {triggers.map((t) => {
@@ -149,7 +151,7 @@ export default function CreateRoutineDialog({
           {triggerType === 'cron' && (
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Schedule
+                {t('createRoutine.schedule')}
               </label>
               <SchedulePicker
                 days={scheduleDays}
@@ -167,14 +169,14 @@ export default function CreateRoutineDialog({
               onClick={onClose}
               className="px-3.5 py-1.5 text-sm text-text-secondary hover:text-text-primary rounded-lg hover:bg-bg-hover transition-colors"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={!canSubmit}
               className="px-3.5 py-1.5 text-sm font-medium text-bg-base bg-accent hover:bg-accent-hover rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Creating...' : 'Create Routine'}
+              {isSubmitting ? t('common.creating') : t('createRoutine.createRoutine')}
             </button>
           </div>
         </form>

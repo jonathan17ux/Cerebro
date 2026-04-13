@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Zap } from 'lucide-react';
 import clsx from 'clsx';
@@ -13,16 +14,17 @@ interface TriggerData {
 }
 
 function TriggerNode({ data, selected }: NodeProps) {
+  const { t } = useTranslation();
   const d = data as TriggerData;
   const type = d.triggerType;
 
   const label = (() => {
     switch (type) {
-      case 'trigger_schedule': return 'Schedule Trigger';
-      case 'trigger_manual': return 'Manual Trigger';
-      case 'trigger_webhook': return 'Webhook Trigger';
-      case 'trigger_app_event': return 'App Event Trigger';
-      default: return 'Trigger';
+      case 'trigger_schedule': return t('triggers.scheduleTrigger');
+      case 'trigger_manual': return t('triggers.manualTrigger');
+      case 'trigger_webhook': return t('triggers.webhookTrigger');
+      case 'trigger_app_event': return t('triggers.appEventTrigger');
+      default: return t('triggers.trigger');
     }
   })();
 
@@ -30,10 +32,10 @@ function TriggerNode({ data, selected }: NodeProps) {
     switch (type) {
       case 'trigger_schedule': {
         const cron = d.config.cron_expression as string;
-        return cron ? describeCron(cron) : 'No schedule set';
+        return cron ? describeCron(cron) : t('triggers.noScheduleSet');
       }
       case 'trigger_manual':
-        return 'Click "Run" to execute';
+        return t('triggers.clickRunToExecute');
       case 'trigger_webhook': {
         const path = (d.config.path as string) || '/webhook/...';
         return `POST ${path}`;
@@ -41,7 +43,7 @@ function TriggerNode({ data, selected }: NodeProps) {
       case 'trigger_app_event': {
         const app = (d.config.app as string) || '';
         const event = (d.config.event as string) || '';
-        return app ? `${app}: ${event}` : 'Not configured';
+        return app ? `${app}: ${event}` : t('triggers.notConfigured');
       }
       default:
         return '';

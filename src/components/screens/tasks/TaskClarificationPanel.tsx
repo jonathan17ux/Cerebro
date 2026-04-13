@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { useTasks } from '../../../context/TaskContext';
 import type { ClarificationQuestion } from './types';
@@ -14,6 +15,7 @@ export default function TaskClarificationPanel({
   questions,
   goal,
 }: TaskClarificationPanelProps) {
+  const { t } = useTranslation();
   const { submitClarification } = useTasks();
   const [answers, setAnswers] = useState<Record<string, string | boolean>>(() => {
     const initial: Record<string, string | boolean> = {};
@@ -133,7 +135,7 @@ export default function TaskClarificationPanel({
           disabled={submitting}
           className="px-4 py-1.5 text-sm rounded-md bg-accent text-white font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors cursor-pointer"
         >
-          {submitting ? 'Starting...' : 'Start'}
+          {submitting ? t('taskDetail.starting') : t('taskDetail.start')}
         </button>
       </div>
     </div>

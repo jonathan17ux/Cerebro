@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
 import { useChat } from '../../context/ChatContext';
 import { useApprovals } from '../../context/ApprovalContext';
 import { useTasks } from '../../context/TaskContext';
@@ -23,31 +24,34 @@ import type { Conversation, Screen } from '../../types/chat';
 
 /* ── Nav structure: grouped by function ───────────────────────── */
 
-interface NavItem {
+interface NavItemDef {
   id: Screen;
-  label: string;
   icon: LucideIcon;
+}
+
+interface NavItem extends NavItemDef {
+  label: string;
   badge?: number;
 }
 
 // Primary — daily-use surfaces
-const NAV_PRIMARY: NavItem[] = [
-  { id: 'chat', label: 'Chat', icon: MessageSquare },
-  { id: 'tasks', label: 'Tasks', icon: Target },
-  { id: 'experts', label: 'Experts', icon: Users },
-  { id: 'routines', label: 'Routines', icon: Zap },
+const NAV_PRIMARY: NavItemDef[] = [
+  { id: 'chat', icon: MessageSquare },
+  { id: 'tasks', icon: Target },
+  { id: 'experts', icon: Users },
+  { id: 'routines', icon: Zap },
 ];
 
 // Oversight — monitoring & control (badge injected dynamically in Sidebar)
-const NAV_OVERSIGHT_BASE: NavItem[] = [
-  { id: 'activity', label: 'Activity', icon: Activity },
-  { id: 'approvals', label: 'Approvals', icon: ShieldCheck },
+const NAV_OVERSIGHT_BASE: NavItemDef[] = [
+  { id: 'activity', icon: Activity },
+  { id: 'approvals', icon: ShieldCheck },
 ];
 
 // Extensions — setup & expand
-const NAV_EXTENSIONS: NavItem[] = [
-  { id: 'integrations', label: 'Integrations', icon: Plug },
-  { id: 'marketplace', label: 'Skills', icon: Sparkles },
+const NAV_EXTENSIONS: NavItemDef[] = [
+  { id: 'integrations', icon: Plug },
+  { id: 'marketplace', icon: Sparkles },
 ];
 
 /* ── NavButton ────────────────────────────────────────────────── */
@@ -158,18 +162,18 @@ function groupByTime(conversations: Conversation[]): GroupedConversations[] {
   const weekStart = new Date(todayStart.getTime() - 7 * 86400000);
 
   const groups: Record<string, Conversation[]> = {
-    Today: [],
-    Yesterday: [],
-    'Previous 7 Days': [],
-    Older: [],
+    today: [],
+    yesterday: [],
+    previous7Days: [],
+    older: [],
   };
 
   for (const conv of conversations) {
-    const t = conv.updatedAt.getTime();
-    if (t >= todayStart.getTime()) groups['Today'].push(conv);
-    else if (t >= yesterdayStart.getTime()) groups['Yesterday'].push(conv);
-    else if (t >= weekStart.getTime()) groups['Previous 7 Days'].push(conv);
-    else groups['Older'].push(conv);
+    const ts = conv.updatedAt.getTime();
+    if (ts >= todayStart.getTime()) groups['today'].push(conv);
+    else if (ts >= yesterdayStart.getTime()) groups['yesterday'].push(conv);
+    else if (ts >= weekStart.getTime()) groups['previous7Days'].push(conv);
+    else groups['older'].push(conv);
   }
 
   return Object.entries(groups)
@@ -179,7 +183,21 @@ function groupByTime(conversations: Conversation[]): GroupedConversations[] {
 
 /* ── Sidebar ──────────────────────────────────────────────────── */
 
+// Map screen IDs to nav translation keys
+const NAV_LABEL_KEYS: Record<string, string> = {
+  chat: 'nav.chat',
+  tasks: 'nav.tasks',
+  experts: 'nav.experts',
+  routines: 'nav.routines',
+  activity: 'nav.activity',
+  approvals: 'nav.approvals',
+  integrations: 'nav.integrations',
+  marketplace: 'nav.skills',
+  settings: 'nav.settings',
+};
+
 export default function Sidebar() {
+  const { t } = useTranslation();
   const {
     conversations,
     activeConversationId,
@@ -197,22 +215,31 @@ export default function Sidebar() {
   const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
   const grouped = useMemo(() => groupByTime(conversations), [conversations]);
 
+  /** Resolve a NavItemDef[] to NavItem[] with translated labels */
+  const resolveLabels = (items: NavItemDef[]): NavItem[] =>
+    items.map((item) => ({ ...item, label: t(NAV_LABEL_KEYS[item.id] ?? item.id) }));
+
   const navPrimary = useMemo<NavItem[]>(() =>
-    NAV_PRIMARY.map((item) =>
+    resolveLabels(NAV_PRIMARY).map((item) =>
       item.id === 'tasks' && runningCount > 0
         ? { ...item, badge: runningCount }
         : item,
     ),
-    [runningCount],
+    [runningCount, t],
   );
 
   const navOversight = useMemo<NavItem[]>(() =>
-    NAV_OVERSIGHT_BASE.map((item) =>
+    resolveLabels(NAV_OVERSIGHT_BASE).map((item) =>
       item.id === 'approvals' && pendingCount > 0
         ? { ...item, badge: pendingCount }
         : item,
     ),
-    [pendingCount],
+    [pendingCount, t],
+  );
+
+  const navExtensions = useMemo<NavItem[]>(() =>
+    resolveLabels(NAV_EXTENSIONS),
+    [t],
   );
 
   const handleNewChat = () => {
@@ -263,7 +290,7 @@ export default function Sidebar() {
             'text-text-tertiary hover:text-text-secondary hover:bg-white/[0.04]',
             'transition-colors duration-150 cursor-pointer',
           )}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={collapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
         >
           {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
         </button>
@@ -281,10 +308,10 @@ export default function Sidebar() {
             'transition-all duration-150 cursor-pointer',
             collapsed ? 'justify-center p-2 w-full' : 'gap-2 px-2.5 py-2 w-full',
           )}
-          title="New Chat"
+          title={t('nav.newChat')}
         >
           <Plus size={15} className="text-accent flex-shrink-0" strokeWidth={2} />
-          {!collapsed && 'New Chat'}
+          {!collapsed && t('nav.newChat')}
         </button>
       </div>
 
@@ -314,7 +341,7 @@ export default function Sidebar() {
 
         {/* Extensions: Integrations, Marketplace */}
         <NavGroup
-          items={NAV_EXTENSIONS}
+          items={navExtensions}
           activeScreen={activeScreen}
           collapsed={collapsed}
           onNavClick={handleNavClick}
@@ -328,13 +355,13 @@ export default function Sidebar() {
           <div className="flex-1 overflow-y-auto scrollbar-thin px-2.5 pb-2">
             {grouped.length === 0 && (
               <div className="px-3 py-6 text-[11px] text-text-tertiary text-center">
-                {isLoading ? 'Loading...' : 'No conversations yet'}
+                {isLoading ? t('common.loading') : t('nav.noConversationsYet')}
               </div>
             )}
             {grouped.map((group) => (
               <div key={group.label} className="mb-1.5">
                 <div className="px-2 pt-3 pb-1 text-[11px] font-semibold text-text-tertiary uppercase tracking-[0.08em] select-none">
-                  {group.label}
+                  {t(`timeGroups.${group.label}`)}
                 </div>
                 <div className="space-y-px">
                   {group.conversations.map((conv) => {
@@ -369,7 +396,7 @@ export default function Sidebar() {
                               'text-text-tertiary hover:text-red-400 hover:bg-red-400/10',
                               'transition-colors duration-100 cursor-pointer',
                             )}
-                            title="Delete conversation"
+                            title={t('nav.deleteConversation')}
                           >
                             <Trash2 size={12} />
                           </button>
@@ -389,7 +416,7 @@ export default function Sidebar() {
       {/* ── Settings (footer) ────────────────────────────────── */}
       <div className="px-2.5 py-2 border-t border-white/[0.04]">
         <NavButton
-          item={{ id: 'settings', label: 'Settings', icon: Settings }}
+          item={{ id: 'settings', label: t('nav.settings'), icon: Settings }}
           isActive={activeScreen === 'settings'}
           collapsed={collapsed}
           onClick={() => handleNavClick('settings')}

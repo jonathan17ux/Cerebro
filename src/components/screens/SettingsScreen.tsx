@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Brain, Palette, Info, Shield, type LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
 import MemorySection from './settings/MemorySection';
 import AppearanceSection from './settings/AppearanceSection';
 import SandboxSection from './settings/SandboxSection';
@@ -10,18 +11,18 @@ type Section = 'memory' | 'sandbox' | 'appearance' | 'about';
 
 interface SectionNavItem {
   id: Section;
-  label: string;
   icon: LucideIcon;
 }
 
 const SECTIONS: SectionNavItem[] = [
-  { id: 'memory', label: 'Memory', icon: Brain },
-  { id: 'sandbox', label: 'Sandbox', icon: Shield },
-  { id: 'appearance', label: 'Appearance', icon: Palette },
-  { id: 'about', label: 'About', icon: Info },
+  { id: 'memory', icon: Brain },
+  { id: 'sandbox', icon: Shield },
+  { id: 'appearance', icon: Palette },
+  { id: 'about', icon: Info },
 ];
 
 export default function SettingsScreen() {
+  const { t } = useTranslation();
   const [activeSection, setActiveSection] = useState<Section>(
     () => consumePendingSettingsSection() ?? 'memory',
   );
@@ -31,7 +32,7 @@ export default function SettingsScreen() {
       {/* Inner sidebar */}
       <div className="w-48 flex-shrink-0 border-r border-white/[0.06] py-4 px-2.5">
         <div className="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary px-2.5 mb-3 select-none">
-          Settings
+          {t('settings.title')}
         </div>
         <div className="space-y-px">
           {SECTIONS.map((section) => {
@@ -60,7 +61,7 @@ export default function SettingsScreen() {
                 >
                   <Icon size={14} strokeWidth={isActive ? 2 : 1.5} />
                 </div>
-                <span className="text-[13px] leading-none">{section.label}</span>
+                <span className="text-[13px] leading-none">{t(`settings.${section.id}`)}</span>
               </button>
             );
           })}
@@ -83,7 +84,7 @@ export default function SettingsScreen() {
           {activeSection === 'about' && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <Info size={32} className="text-text-tertiary mb-3" />
-              <p className="text-sm text-text-tertiary">About Cerebro coming soon</p>
+              <p className="text-sm text-text-tertiary">{t('settings.aboutComingSoon')}</p>
             </div>
           )}
         </div>

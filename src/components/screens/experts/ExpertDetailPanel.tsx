@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Copy, Check, Trash2, UserPlus, XCircle, Users, Phone } from 'lucide-react';
 import clsx from 'clsx';
 import { useVoice } from '../../../context/VoiceContext';
@@ -11,16 +12,16 @@ import AvatarPicker from './AvatarPicker';
 
 const DOMAINS = ['', 'productivity', 'health', 'finance', 'creative', 'engineering', 'research'];
 
-function timeAgo(dateStr: string | null): string {
+function timeAgo(dateStr: string | null, t: (key: string, opts?: Record<string, unknown>) => string): string {
   if (!dateStr) return 'Never';
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t('timeAgo.justNow');
+  if (mins < 60) return t('timeAgo.minutesAgo', { count: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return t('timeAgo.hoursAgo', { count: hrs });
   const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return t('timeAgo.daysAgo', { count: days });
 }
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
@@ -80,6 +81,7 @@ export default function ExpertDetailPanel({
   activeCount,
   pinnedCount,
 }: ExpertDetailPanelProps) {
+  const { t } = useTranslation();
   const { startCall } = useVoice();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -142,13 +144,13 @@ export default function ExpertDetailPanel({
       <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle flex-shrink-0">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-text-primary tracking-wide">
-            Configuration
+            {t('experts.configuration')}
           </h3>
           {!isCerebro && expert?.type === 'expert' && expert.isEnabled && (
             <button
               onClick={() => expert && startCall(expert.id)}
               className="p-1.5 rounded-lg text-accent hover:bg-accent/10 transition-colors"
-              title="Call expert"
+              title={t('experts.callExpert')}
             >
               <Phone size={14} />
             </button>
@@ -166,21 +168,21 @@ export default function ExpertDetailPanel({
       <div className="flex-1 overflow-y-auto scrollbar-thin px-5 py-5 space-y-6">
         {isCerebro ? (
           <>
-            <Section label="LEAD EXPERT">
+            <Section label={t('experts.leadExpert')}>
               <div className="text-sm text-text-primary font-medium">Cerebro</div>
               <p className="text-xs text-text-secondary mt-1.5 leading-relaxed">
-                Always available. Plans, delegates, learns, and gets things done.
+                {t('experts.alwaysAvailable')}
               </p>
             </Section>
 
-            <Section label="CAPABILITIES">
+            <Section label={t('experts.capabilities')}>
               <div className="space-y-2">
                 {[
-                  'Responds directly',
-                  'Routes to experts',
-                  'Proposes routines',
-                  'Drafts specialists',
-                  'Manages memory',
+                  t('experts.capResponds'),
+                  t('experts.capRoutes'),
+                  t('experts.capRoutines'),
+                  t('experts.capDrafts'),
+                  t('experts.capMemory'),
                 ].map((cap) => (
                   <div key={cap} className="flex items-center gap-2.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-accent flex-shrink-0" />
@@ -190,13 +192,13 @@ export default function ExpertDetailPanel({
               </div>
             </Section>
 
-            <Section label="STATUS">
+            <Section label={t('experts.statusLabel')}>
               <div className="space-y-1.5">
                 <div className="text-xs text-text-secondary">
-                  {activeCount} expert{activeCount !== 1 ? 's' : ''} active
+                  {t('experts.expert', { count: activeCount })}
                 </div>
                 <div className="text-xs text-text-secondary">
-                  {pinnedCount} pinned
+                  {t('experts.pinned', { count: pinnedCount })}
                 </div>
               </div>
             </Section>
@@ -204,7 +206,7 @@ export default function ExpertDetailPanel({
         ) : expert ? (
           <>
             {/* Expert ID */}
-            <Section label="NODE ID">
+            <Section label={t('experts.nodeId')}>
               <div className="flex items-center gap-2">
                 <code className="text-xs text-text-secondary font-mono">
                   #{expert.slug ?? expert.id.slice(0, 16)}
@@ -219,11 +221,11 @@ export default function ExpertDetailPanel({
             </Section>
 
             {/* Name */}
-            <Section label="DETAILS">
+            <Section label={t('experts.details')}>
               <div className="space-y-3">
                 <div>
                   <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide mb-1">
-                    Name
+                    {t('experts.name')}
                   </label>
                   <input
                     value={name}
@@ -235,7 +237,7 @@ export default function ExpertDetailPanel({
 
                 <div>
                   <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide mb-1">
-                    Domain
+                    {t('experts.domain')}
                   </label>
                   <select
                     value={domain}
@@ -245,10 +247,10 @@ export default function ExpertDetailPanel({
                     }}
                     className="w-full bg-bg-base border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent/30 transition-colors"
                   >
-                    <option value="">None</option>
+                    <option value="">{t('common.none')}</option>
                     {DOMAINS.filter(Boolean).map((d) => (
                       <option key={d} value={d}>
-                        {d.charAt(0).toUpperCase() + d.slice(1)}
+                        {t(`domains.${d}`)}
                       </option>
                     ))}
                   </select>
@@ -256,7 +258,7 @@ export default function ExpertDetailPanel({
 
                 <div>
                   <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide mb-1">
-                    Description
+                    {t('experts.description')}
                   </label>
                   <textarea
                     value={description}
@@ -272,7 +274,7 @@ export default function ExpertDetailPanel({
 
                 <div>
                   <label className="block text-[11px] font-medium text-text-secondary uppercase tracking-wide mb-1">
-                    Avatar
+                    {t('experts.avatar')}
                   </label>
                   <AvatarPicker
                     value={expert.avatarUrl}
@@ -284,7 +286,7 @@ export default function ExpertDetailPanel({
 
             {/* Team Members (only for teams) */}
             {isTeam && (
-              <Section label="TEAM MEMBERS">
+              <Section label={t('experts.teamMembers')}>
                 {currentMembers.length > 0 ? (
                   <div className="space-y-1.5">
                     {currentMembers.map((member) => (
@@ -412,7 +414,7 @@ export default function ExpertDetailPanel({
                 </div>
                 <div>
                   Last active:{' '}
-                  <span className="text-text-secondary">{timeAgo(expert.lastActiveAt)}</span>
+                  <span className="text-text-secondary">{timeAgo(expert.lastActiveAt, t)}</span>
                 </div>
               </div>
             </Section>

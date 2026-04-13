@@ -6,12 +6,14 @@
  * Sandbox; "Dismiss" persists the dismissal via the sandbox config.
  */
 
+import { useTranslation } from 'react-i18next';
 import { Shield, X } from 'lucide-react';
 import { useSandbox } from '../../context/SandboxContext';
 import { useChat } from '../../context/ChatContext';
 import { setPendingSettingsSection } from '../screens/settings/pending-section';
 
 export default function SandboxBanner() {
+  const { t } = useTranslation();
   const { config, dismissBanner } = useSandbox();
   const { setActiveScreen } = useChat();
 
@@ -33,31 +35,30 @@ export default function SandboxBanner() {
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-medium text-text-primary">
-            Agents currently have full access to your Mac
+            {t('sandboxBanner.title')}
           </div>
           <div className="text-xs text-text-secondary mt-0.5 leading-relaxed">
-            Turn on the sandbox to confine Cerebro to a workspace and the projects you
-            explicitly link. You can enable it in a few seconds.
+            {t('sandboxBanner.description')}
           </div>
           <div className="flex items-center gap-2 mt-2.5">
             <button
               onClick={handleEnable}
               className="px-3 py-1.5 rounded-md text-xs font-medium bg-accent text-bg-base hover:bg-accent/90 transition-colors cursor-pointer"
             >
-              Enable sandbox
+              {t('sandboxBanner.enableSandbox')}
             </button>
             <button
               onClick={() => dismissBanner()}
               className="px-3 py-1.5 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-white/[0.04] transition-colors cursor-pointer"
             >
-              Not now
+              {t('sandboxBanner.notNow')}
             </button>
           </div>
         </div>
         <button
           onClick={() => dismissBanner()}
           className="p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-white/[0.04] transition-colors cursor-pointer flex-shrink-0"
-          aria-label="Dismiss sandbox banner"
+          aria-label={t('sandboxBanner.dismissAria')}
         >
           <X size={13} />
         </button>

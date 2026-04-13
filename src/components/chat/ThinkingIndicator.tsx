@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Brain, Cpu, Sparkles, Search, Lightbulb, Workflow, Zap } from 'lucide-react';
 
 const THINKING_ICONS = [Brain, Cpu, Sparkles, Search, Lightbulb, Workflow, Zap];
 const CYCLE_MS = 500;
 
 export default function ThinkingIndicator() {
+  const { t } = useTranslation();
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
@@ -22,7 +24,7 @@ export default function ThinkingIndicator() {
         <Icon size={16} className="transition-opacity duration-150" />
       </div>
       <span className="text-xs text-text-secondary">
-        Cerebro is thinking
+        {t('chat.thinking')}
         <span className="thinking-dots" />
       </span>
     </div>

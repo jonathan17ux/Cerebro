@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import type { Message } from '../../types/chat';
 import MarkdownContent from './MarkdownContent';
@@ -42,6 +43,7 @@ function parseFileRefs(content: string): { attachments: AttachmentInfo[]; text: 
 }
 
 export default function ChatMessage({ message }: ChatMessageProps) {
+  const { t } = useTranslation();
   const isUser = message.role === 'user';
   const hasToolCalls = message.toolCalls && message.toolCalls.length > 0;
 
@@ -57,7 +59,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
         <span
           className={clsx('text-xs font-medium', isUser ? 'text-accent' : 'text-text-secondary')}
         >
-          {isUser ? 'You' : 'Cerebro'}
+          {isUser ? t('chat.you') : t('chat.cerebro')}
         </span>
         <span className="text-xs text-text-tertiary">{formatTime(message.createdAt)}</span>
       </div>

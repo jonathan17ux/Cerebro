@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { VoiceSessionState } from '../../../voice/types';
 
 interface SubtitleBarProps {
@@ -13,6 +14,7 @@ export default function SubtitleBar({
   response,
   visible,
 }: SubtitleBarProps) {
+  const { t } = useTranslation();
   if (!visible) return null;
 
   // Show user transcription when it arrives (state is 'processing' by then,
@@ -40,7 +42,7 @@ export default function SubtitleBar({
           }`}
         >
           {hasTranscription && !isExpertSpeaking && (
-            <span className="text-text-tertiary text-xs mr-2">You:</span>
+            <span className="text-text-tertiary text-xs mr-2">{t('call.you')}</span>
           )}
           {text}
         </p>

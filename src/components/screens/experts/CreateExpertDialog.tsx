@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, User, Users, Check } from 'lucide-react';
 import clsx from 'clsx';
 import type { Expert, ExpertType, CreateExpertInput } from '../../../context/ExpertContext';
@@ -19,6 +20,7 @@ export default function CreateExpertDialog({
   onCreate,
   experts,
 }: CreateExpertDialogProps) {
+  const { t } = useTranslation();
   const [type, setType] = useState<ExpertType>('expert');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -92,7 +94,7 @@ export default function CreateExpertDialog({
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-base font-medium text-text-primary">
-            New {type === 'team' ? 'Team' : 'Expert'}
+            {type === 'team' ? t('createExpert.newTeam') : t('createExpert.newExpert')}
           </h3>
           <button
             onClick={onClose}
@@ -106,7 +108,7 @@ export default function CreateExpertDialog({
           {/* Type Toggle */}
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Type
+              {t('createExpert.typeLabel')}
             </label>
             <div className="flex gap-2">
               <button
@@ -123,7 +125,7 @@ export default function CreateExpertDialog({
                 )}
               >
                 <User size={15} />
-                Expert
+                {t('createExpert.typeExpert')}
               </button>
               <button
                 type="button"
@@ -136,7 +138,7 @@ export default function CreateExpertDialog({
                 )}
               >
                 <Users size={15} />
-                Team
+                {t('createExpert.typeTeam')}
               </button>
             </div>
           </div>
@@ -144,14 +146,14 @@ export default function CreateExpertDialog({
           {/* Name */}
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Name
+              {t('experts.name')}
             </label>
             <input
               ref={nameRef}
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={type === 'team' ? 'e.g. Research Division' : 'e.g. Research Analyst'}
+              placeholder={type === 'team' ? t('createExpert.namePlaceholderTeam') : t('createExpert.namePlaceholderExpert')}
               className="w-full bg-bg-surface border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 transition-colors"
             />
           </div>
@@ -159,15 +161,15 @@ export default function CreateExpertDialog({
           {/* Description */}
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Description
+              {t('experts.description')}
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={
                 type === 'team'
-                  ? 'What does this team handle?'
-                  : 'What does this expert do?'
+                  ? t('createExpert.descPlaceholderTeam')
+                  : t('createExpert.descPlaceholderExpert')
               }
               rows={2}
               className="w-full bg-bg-surface border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 transition-colors resize-none"
@@ -177,17 +179,17 @@ export default function CreateExpertDialog({
           {/* Domain */}
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Domain <span className="text-text-tertiary font-normal">(optional)</span>
+              {t('experts.domain')} <span className="text-text-tertiary font-normal">{t('common.optional')}</span>
             </label>
             <select
               value={domain}
               onChange={(e) => setDomain(e.target.value)}
               className="w-full bg-bg-surface border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent/40 transition-colors"
             >
-              <option value="">None</option>
+              <option value="">{t('common.none')}</option>
               {DOMAINS.filter(Boolean).map((d) => (
                 <option key={d} value={d}>
-                  {d.charAt(0).toUpperCase() + d.slice(1)}
+                  {t(`domains.${d}`)}
                 </option>
               ))}
             </select>
@@ -196,7 +198,7 @@ export default function CreateExpertDialog({
           {/* Avatar */}
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Avatar <span className="text-text-tertiary font-normal">(optional)</span>
+              {t('experts.avatar')} <span className="text-text-tertiary font-normal">{t('common.optional')}</span>
             </label>
             <AvatarPicker value={avatarUrl} onChange={setAvatarUrl} />
           </div>
@@ -205,14 +207,14 @@ export default function CreateExpertDialog({
           {type === 'team' && (
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Members{' '}
+                {t('experts.teamMembers')}{' '}
                 <span className="text-text-tertiary font-normal">
-                  ({selectedMembers.length} selected)
+                  {t('createExpert.membersSelected', { count: selectedMembers.length })}
                 </span>
               </label>
               {availableExperts.length === 0 ? (
                 <p className="text-xs text-text-tertiary bg-bg-surface rounded-lg px-3 py-3 border border-border-subtle">
-                  Create individual experts first, then add them to a team.
+                  {t('createExpert.membersEmpty')}
                 </p>
               ) : (
                 <div className="max-h-40 overflow-y-auto scrollbar-thin bg-bg-surface rounded-lg border border-border-subtle divide-y divide-border-subtle">
@@ -265,7 +267,7 @@ export default function CreateExpertDialog({
               onClick={onClose}
               className="px-3.5 py-1.5 text-sm text-text-secondary hover:text-text-primary rounded-lg hover:bg-bg-hover transition-colors"
             >
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
@@ -273,8 +275,8 @@ export default function CreateExpertDialog({
               className="px-3.5 py-1.5 text-sm font-medium text-bg-base bg-accent hover:bg-accent-hover rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {isSubmitting
-                ? 'Creating...'
-                : `Create ${type === 'team' ? 'Team' : 'Expert'}`}
+                ? t('common.creating')
+                : type === 'team' ? t('createExpert.createTeam') : t('createExpert.createExpert')}
             </button>
           </div>
         </form>

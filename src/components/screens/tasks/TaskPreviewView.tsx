@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Play, Square, Loader2, ExternalLink, RefreshCw, RotateCcw } from 'lucide-react';
 import type { Task, TaskDetail } from './types';
 
@@ -18,6 +19,7 @@ interface TaskPreviewViewProps {
 type ServerState = 'stopped' | 'starting' | 'running' | 'error';
 
 export default function TaskPreviewView({ task, detail }: TaskPreviewViewProps) {
+  const { t } = useTranslation();
   const [state, setState] = useState<ServerState>('stopped');
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +84,7 @@ export default function TaskPreviewView({ task, detail }: TaskPreviewViewProps) 
 
       if (!res.ok) {
         setState('error');
-        setError('Failed to start preview server');
+        setError(t('taskDetail.failedToStartPreview'));
         return;
       }
 
@@ -103,7 +105,7 @@ export default function TaskPreviewView({ task, detail }: TaskPreviewViewProps) 
           }
           if (!status.data.running) {
             setState('error');
-            setError('Preview server stopped unexpectedly');
+            setError(t('taskDetail.previewStopped'));
             stopPolling();
           }
         }
@@ -112,7 +114,7 @@ export default function TaskPreviewView({ task, detail }: TaskPreviewViewProps) 
       timeoutRef.current = setTimeout(() => stopPolling(), 90_000);
     } catch {
       setState('error');
-      setError('Failed to start preview server');
+      setError(t('taskDetail.failedToStartPreview'));
     }
   }, [task.id, task.run_info, stopPolling]);
 
@@ -161,7 +163,7 @@ export default function TaskPreviewView({ task, detail }: TaskPreviewViewProps) 
   if (state === 'error') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-text-tertiary text-sm gap-3">
-        <span className="text-red-400">{error || 'Preview failed'}</span>
+        <span className="text-red-400">{error || t('taskDetail.previewFailed')}</span>
         <button
           onClick={handleStart}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-bg-secondary text-text-secondary hover:text-text-primary text-xs cursor-pointer transition-colors"

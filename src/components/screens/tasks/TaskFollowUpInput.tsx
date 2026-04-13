@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowUp, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useTasks } from '../../../context/TaskContext';
@@ -8,6 +9,7 @@ interface TaskFollowUpInputProps {
 }
 
 export default function TaskFollowUpInput({ taskId }: TaskFollowUpInputProps) {
+  const { t } = useTranslation();
   const { followUpTask } = useTasks();
   const [value, setValue] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -53,7 +55,7 @@ export default function TaskFollowUpInput({ taskId }: TaskFollowUpInputProps) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Follow up... (e.g. &quot;add dark mode&quot;, &quot;make section 2 shorter&quot;)"
+          placeholder={t('taskDetail.followUpPlaceholder')}
           rows={1}
           disabled={isSubmitting}
           className={clsx(
