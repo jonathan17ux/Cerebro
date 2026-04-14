@@ -816,7 +816,7 @@ def test_delete_cascade_cleans_workspace(client):
     assert not os.path.exists(workspace)
 
 
-def test_delete_cascade_marks_run_cancelled(client):
+def test_delete_cascade_removes_run(client):
     t = _create_task(client)
     run_resp = _start_run(client, t["id"])
     run_id = run_resp["run_id"]
@@ -829,10 +829,9 @@ def test_delete_cascade_marks_run_cancelled(client):
     # Delete the task
     client.delete(f"/tasks/{t['id']}")
 
-    # The run should now be cancelled
+    # The run record cascades with the task
     r = client.get(f"/engine/runs/{run_id}")
-    assert r.status_code == 200
-    assert r.json()["status"] == "cancelled"
+    assert r.status_code == 404
 
 
 def test_delete_cascade_events_gone(client):
@@ -873,13 +872,13 @@ def test_run_creates_conversation_and_workspace(client):
     assert os.path.isdir(run_resp["workspace_path"])
 
 
-def test_run_reuses_conversation(client):
-    """Multiple runs reuse the same conversation (clarify + execute)."""
+def test_run_mints_fresh_ids_per_phase(client):
+    """Each phase mints its own tracking id and run record (tasks are independent of conversations)."""
     t = _create_task(client)
     r1 = _start_run(client, t["id"], phase="clarify")
     r2 = _start_run(client, t["id"], phase="execute")
-    assert r1["conversation_id"] == r2["conversation_id"]
-    assert r1["run_id"] != r2["run_id"]  # new run record each time
+    assert r1["conversation_id"] != r2["conversation_id"]
+    assert r1["run_id"] != r2["run_id"]
 
 
 def test_plan_upsert_sets_running_status(client):
