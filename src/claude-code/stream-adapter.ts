@@ -113,7 +113,7 @@ export class ClaudeCodeRunner extends EventEmitter {
       this.stderrTail = (this.stderrTail + '\n' + text).slice(-500).trim();
     });
 
-    this.process.on('close', (code) => {
+    this.process.on('close', (code, signal) => {
       if (this.closeHandled) return;
       this.closeHandled = true;
 
@@ -124,7 +124,14 @@ export class ClaudeCodeRunner extends EventEmitter {
 
       if (this.killed) return;
 
-      if (code !== 0 && code !== null) {
+      // Treat non-zero exit codes AND signal kills as errors.
+      // When a process is killed by a signal (e.g. sandbox-exec SIGABRT),
+      // code is null and signal is set — this is NOT a success.
+      // Note: on some platforms signal can be 0 (number) for normal exits — ignore that.
+      const realSignal = signal && String(signal) !== '0' ? signal : null;
+      const isError = (code !== 0 && code !== null) || realSignal != null;
+
+      if (isError) {
         let detail: string;
         if (this.stderrTail.includes('max turns')) {
           detail = 'Claude Code reached the maximum number of turns without completing the task. Try a simpler request.';
@@ -132,6 +139,10 @@ export class ClaudeCodeRunner extends EventEmitter {
           detail = 'Rate limited by the API. Please wait a moment and try again.';
         } else if (this.stderrTail.includes('authentication') || this.stderrTail.includes('401')) {
           detail = 'Authentication error. Check your API key in Settings.';
+        } else if (signal) {
+          detail = this.stderrTail
+            ? `Claude Code was killed (${signal}): ${this.stderrTail}`
+            : `Claude Code was killed by ${signal}`;
         } else {
           detail = this.stderrTail
             ? `Claude Code error (code ${code}): ${this.stderrTail}`
@@ -155,7 +166,9 @@ export class ClaudeCodeRunner extends EventEmitter {
       setTimeout(() => {
         if (!this.closeHandled && !this.killed) {
           this.closeHandled = true;
-          if (code !== 0 && code !== null) {
+          const realSignal = signal && String(signal) !== '0' ? signal : null;
+          const isError = (code !== 0 && code !== null) || realSignal != null;
+          if (isError) {
             const detail = `Claude Code exited (code ${code}, signal ${signal})`;
             this.emit('event', { type: 'error', runId, error: detail } as RendererAgentEvent);
             this.emit('error', detail);

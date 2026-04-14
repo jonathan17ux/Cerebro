@@ -16,6 +16,7 @@ import { ipcMain, type WebContents } from 'electron';
 import type { AgentRunRequest, ActiveRunInfo, RendererAgentEvent } from './types';
 import { ClaudeCodeRunner } from '../claude-code/stream-adapter';
 import { TaskPtyRunner } from '../pty/TaskPtyRunner';
+import { TerminalBufferStore } from '../pty/TerminalBufferStore';
 import { getAgentNameForExpert, installAll } from '../claude-code/installer';
 import { IPC_CHANNELS } from '../types/ipc';
 import { buildSystemPrompt } from '../i18n/language-directive';
@@ -30,7 +31,9 @@ interface ActiveRun {
   userContent: string;
   startedAt: number;
   accumulatedText: string;
-  runner: ClaudeCodeRunner;
+  /** Stream-json runner (used for chat runs and task clarify phase). */
+  runner: ClaudeCodeRunner | null;
+  /** PTY runner (used for task execute/follow_up — sole process, no stream runner). */
   ptyRunner: TaskPtyRunner | null;
   isTaskRun: boolean;
 }
@@ -45,10 +48,12 @@ export class AgentRuntime {
   private backendPort: number;
   private dataDir: string;
   private syncChain: Promise<void> = Promise.resolve();
+  public terminalBufferStore: TerminalBufferStore;
 
   constructor(backendPort: number, dataDir: string) {
     this.backendPort = backendPort;
     this.dataDir = dataDir;
+    this.terminalBufferStore = new TerminalBufferStore(dataDir);
   }
 
   /**
@@ -288,7 +293,24 @@ ${answersSection}
     }
 
     const channel = `agent:event:${runId}`;
-    const runner = new ClaudeCodeRunner();
+
+    // Resolve maxTurns: clarify=15, execute/follow_up=request.maxTurns or 30, chat=15
+    let maxTurns = 15;
+    if (isTaskRun) {
+      if (request.taskPhase === 'clarify') {
+        maxTurns = 15;
+      } else {
+        maxTurns = request.maxTurns ?? 30;
+      }
+    } else if (request.maxTurns) {
+      maxTurns = request.maxTurns;
+    }
+
+    // For task execute/follow_up phases, use the workspace as CWD so Claude
+    // Code writes files there. For everything else, use dataDir.
+    const cwd = (isTaskRun && (request.taskPhase === 'execute' || request.taskPhase === 'follow_up') && request.workspacePath)
+      ? request.workspacePath
+      : this.dataDir;
 
     const activeRun: ActiveRun = {
       runId,
@@ -297,7 +319,7 @@ ${answersSection}
       userContent: content,
       startedAt: Date.now(),
       accumulatedText: '',
-      runner,
+      runner: null,
       ptyRunner: null,
       isTaskRun,
     };
@@ -322,78 +344,33 @@ ${answersSection}
       webContents.send(channel, { type: 'run_start', runId } as RendererAgentEvent);
     }
 
-    // Forward stream events to renderer
-    runner.on('event', (event: RendererAgentEvent) => {
-      if (event.type === 'text_delta') {
-        activeRun.accumulatedText += event.delta;
-      }
-      if (!webContents.isDestroyed()) {
-        webContents.send(channel, event);
-      }
-    });
-
-    runner.on('done', (messageContent: string) => {
-      this.finalizeRun(runId, 'completed', messageContent);
-      this.postRunSync(webContents);
-    });
-
-    runner.on('error', (error: string) => {
-      if (!webContents.isDestroyed()) {
-        webContents.send(channel, {
-          type: 'error',
-          runId,
-          error,
-        } as RendererAgentEvent);
-      }
-      this.finalizeRun(runId, 'error', activeRun.accumulatedText, error);
-      this.postRunSync(webContents);
-    });
-
-    // Resolve maxTurns: clarify=5, execute/follow_up=request.maxTurns or 60, chat=15
-    let maxTurns = 15;
+    // Task runs use the PTY for authentic terminal output. ANSI-stripped text
+    // is bridged as text_delta events so the stream parser can extract tags.
     if (isTaskRun) {
-      if (request.taskPhase === 'clarify') {
-        maxTurns = 5;
-      } else {
-        maxTurns = request.maxTurns ?? 60;
-      }
-    } else if (request.maxTurns) {
-      maxTurns = request.maxTurns;
-    }
-
-    // For task execute/follow_up phases, use the workspace as CWD so Claude
-    // Code writes files there. For everything else, use dataDir.
-    const cwd = (isTaskRun && (request.taskPhase === 'execute' || request.taskPhase === 'follow_up') && request.workspacePath)
-      ? request.workspacePath
-      : this.dataDir;
-
-    runner.start({
-      runId,
-      prompt: fullPrompt,
-      agentName,
-      cwd,
-      maxTurns,
-      model: request.model,
-      language: request.language,
-    });
-
-    // For task execute/follow_up, also spawn a PTY runner for authentic terminal
-    // output. The PTY data goes directly to the renderer for xterm.js display.
-    // The stream-json runner above still handles structured events for the
-    // Plan/Deliverable tabs.
-    if (isTaskRun && request.taskPhase !== 'clarify') {
       const ptyRunner = new TaskPtyRunner();
       activeRun.ptyRunner = ptyRunner;
 
-      const ptyChannel = IPC_CHANNELS.taskTerminalData(runId);
-
+      // Raw PTY data → global channel + disk (survives app restart).
       ptyRunner.on('data', (data: string) => {
+        this.terminalBufferStore.append(runId, data);
         if (!webContents.isDestroyed()) {
-          webContents.send(ptyChannel, data);
+          webContents.send(IPC_CHANNELS.TASK_TERMINAL_DATA, runId, data);
         }
       });
 
-      // Listen for resize requests from the renderer
+      // ANSI-stripped text → text_delta events for the stream parser
+      // (Plan/Deliverable tabs extract structured tags from this text)
+      ptyRunner.on('text', (text: string) => {
+        activeRun.accumulatedText += text;
+        if (!webContents.isDestroyed()) {
+          webContents.send(channel, {
+            type: 'text_delta',
+            delta: text,
+          } as RendererAgentEvent);
+        }
+      });
+
+      // Resize IPC
       const resizeHandler = (_event: Electron.IpcMainEvent, resizeRunId: string, cols: number, rows: number) => {
         if (resizeRunId === runId) {
           ptyRunner.resize(cols, rows);
@@ -401,8 +378,44 @@ ${answersSection}
       };
       ipcMain.on(IPC_CHANNELS.TASK_TERMINAL_RESIZE, resizeHandler);
 
-      ptyRunner.on('exit', () => {
+      // Input IPC — renderer writes keystrokes to PTY stdin
+      const inputHandler = (_event: Electron.IpcMainEvent, inputRunId: string, data: string) => {
+        if (inputRunId === runId) {
+          ptyRunner.write(data);
+        }
+      };
+      ipcMain.on(IPC_CHANNELS.TASK_TERMINAL_INPUT, inputHandler);
+
+      ptyRunner.on('exit', (code: number, signal?: string) => {
         ipcMain.removeListener(IPC_CHANNELS.TASK_TERMINAL_RESIZE, resizeHandler);
+        ipcMain.removeListener(IPC_CHANNELS.TASK_TERMINAL_INPUT, inputHandler);
+        this.terminalBufferStore.flush(runId);
+
+        // Aborted by cancelRun — finalization already handled by caller.
+        if (ptyRunner.isAborted()) return;
+
+        // node-pty on macOS can report signal as 0 (number) for normal exits.
+        const realSignal = signal && signal !== '0' && signal !== 'undefined' ? signal : null;
+        const isError = (code !== 0 && code !== null) || realSignal != null;
+        if (isError) {
+          const detail = realSignal
+            ? `Claude Code was killed (${realSignal})`
+            : `Claude Code exited with code ${code}`;
+          if (!webContents.isDestroyed()) {
+            webContents.send(channel, { type: 'error', runId, error: detail } as RendererAgentEvent);
+          }
+          this.finalizeRun(runId, 'error', activeRun.accumulatedText, detail);
+        } else {
+          if (!webContents.isDestroyed()) {
+            webContents.send(channel, {
+              type: 'done',
+              runId,
+              messageContent: activeRun.accumulatedText,
+            } as RendererAgentEvent);
+          }
+          this.finalizeRun(runId, 'completed', activeRun.accumulatedText);
+        }
+        this.postRunSync(webContents);
       });
 
       ptyRunner.start({
@@ -413,6 +426,50 @@ ${answersSection}
         maxTurns,
         model: request.model,
         appendSystemPrompt: buildSystemPrompt(request.language),
+        cols: request.cols,
+        rows: request.rows,
+        resume: !!request.resumeSessionId,
+        sessionId: request.resumeSessionId || runId,
+      });
+    } else {
+      // Chat runs use stream-json mode (no PTY).
+      const runner = new ClaudeCodeRunner();
+      activeRun.runner = runner;
+
+      runner.on('event', (event: RendererAgentEvent) => {
+        if (event.type === 'text_delta') {
+          activeRun.accumulatedText += event.delta;
+        }
+        if (!webContents.isDestroyed()) {
+          webContents.send(channel, event);
+        }
+      });
+
+      runner.on('done', (messageContent: string) => {
+        this.finalizeRun(runId, 'completed', messageContent);
+        this.postRunSync(webContents);
+      });
+
+      runner.on('error', (error: string) => {
+        if (!webContents.isDestroyed()) {
+          webContents.send(channel, {
+            type: 'error',
+            runId,
+            error,
+          } as RendererAgentEvent);
+        }
+        this.finalizeRun(runId, 'error', activeRun.accumulatedText, error);
+        this.postRunSync(webContents);
+      });
+
+      runner.start({
+        runId,
+        prompt: fullPrompt,
+        agentName,
+        cwd,
+        maxTurns,
+        model: request.model,
+        language: request.language,
       });
     }
 
@@ -422,7 +479,7 @@ ${answersSection}
   cancelRun(runId: string): boolean {
     const run = this.activeRuns.get(runId);
     if (!run) return false;
-    run.runner.abort();
+    run.runner?.abort();
     run.ptyRunner?.abort();
     this.finalizeRun(runId, 'cancelled', run.accumulatedText);
     return true;

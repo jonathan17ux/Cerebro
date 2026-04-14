@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Trash2, Square } from 'lucide-react';
 import clsx from 'clsx';
@@ -10,7 +10,6 @@ import TaskDeliverableView from './TaskDeliverableView';
 import TaskClarificationPanel from './TaskClarificationPanel';
 import TaskWorkspaceView from './TaskWorkspaceView';
 import TaskPreviewView from './TaskPreviewView';
-import TaskFollowUpInput from './TaskFollowUpInput';
 import type { Task, TaskDetail } from './types';
 
 interface TaskDetailPanelProps {
@@ -23,7 +22,7 @@ export default function TaskDetailPanel({ taskId }: TaskDetailPanelProps) {
   const { t } = useTranslation();
   const { tasks, liveTask, cancelTask, deleteTask, watchTask, unwatchTask, refresh } = useTasks();
   const [detail, setDetail] = useState<TaskDetail | null>(null);
-  const [activeTab, setActiveTab] = useState<TabId>('plan');
+  const [activeTab, setActiveTab] = useState<TabId>('console');
 
   const task = tasks.find((tk) => tk.id === taskId) ?? null;
 
@@ -44,6 +43,22 @@ export default function TaskDetailPanel({ taskId }: TaskDetailPanelProps) {
     if (task) watchTask(taskId);
     return () => unwatchTask();
   }, [taskId, task?.status]);
+
+  // Auto-switch to preview tab once when deliverableKind becomes code_app/mixed.
+  // Uses a ref for activeTab so the effect fires only on deliverableKind changes,
+  // not on every tab navigation (which would re-yank the user to preview).
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
+  useEffect(() => {
+    if (
+      liveTask?.taskId === taskId &&
+      (liveTask.deliverableKind === 'code_app' || liveTask.deliverableKind === 'mixed') &&
+      activeTabRef.current === 'plan'
+    ) {
+      setActiveTab('preview');
+    }
+  }, [liveTask?.deliverableKind, liveTask?.taskId, taskId]);
 
   useEffect(() => {
     if (liveTask && liveTask.taskId === taskId) {
@@ -67,6 +82,28 @@ export default function TaskDetailPanel({ taskId }: TaskDetailPanelProps) {
     await deleteTask(taskId);
   }, [deleteTask, taskId]);
 
+  // Derive values safely before any early returns so hook count is stable
+  const style = task ? (STATUS_CONFIG[task.status] ?? STATUS_CONFIG.pending) : STATUS_CONFIG.pending;
+  const isActive = task != null && (task.status === 'running' || task.status === 'clarifying' || task.status === 'planning');
+  const isTerminal = task != null && (task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled');
+  const showClarification = task?.status === 'awaiting_clarification';
+
+  const hasWorkspace = task != null && (task.deliverable_kind === 'code_app' || task.deliverable_kind === 'mixed');
+  // Show preview tab during execution (even before deliverable_kind is known)
+  // or for completed code_app/mixed tasks
+  const showPreview = hasWorkspace || isActive;
+  const tabs = useMemo<Array<{ id: TabId; label: string }>>(() => [
+    { id: 'plan', label: t('taskDetail.tabPlan') },
+    { id: 'console', label: t('taskDetail.tabConsole') },
+    { id: 'deliverable', label: t('taskDetail.tabDeliverable') },
+    ...(hasWorkspace ? [
+      { id: 'workspace' as const, label: t('taskDetail.tabWorkspace') },
+    ] : []),
+    ...(showPreview ? [
+      { id: 'preview' as const, label: t('taskDetail.tabPreview') },
+    ] : []),
+  ], [t, hasWorkspace, showPreview]);
+
   if (!task) {
     return (
       <div className="flex-1 flex items-center justify-center text-text-tertiary text-sm">
@@ -74,22 +111,6 @@ export default function TaskDetailPanel({ taskId }: TaskDetailPanelProps) {
       </div>
     );
   }
-
-  const style = STATUS_CONFIG[task.status] ?? STATUS_CONFIG.pending;
-  const isActive = task.status === 'running' || task.status === 'clarifying' || task.status === 'planning';
-  const isTerminal = task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled';
-  const showClarification = task.status === 'awaiting_clarification';
-
-  const hasWorkspace = task.deliverable_kind === 'code_app' || task.deliverable_kind === 'mixed';
-  const tabs = useMemo<Array<{ id: TabId; label: string }>>(() => [
-    { id: 'plan', label: t('taskDetail.tabPlan') },
-    { id: 'console', label: t('taskDetail.tabConsole') },
-    { id: 'deliverable', label: t('taskDetail.tabDeliverable') },
-    ...(hasWorkspace ? [
-      { id: 'workspace' as const, label: t('taskDetail.tabWorkspace') },
-      { id: 'preview' as const, label: t('taskDetail.tabPreview') },
-    ] : []),
-  ], [t, hasWorkspace]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -172,7 +193,9 @@ export default function TaskDetailPanel({ taskId }: TaskDetailPanelProps) {
           {/* Tab content — Console and Preview manage their own scroll */}
           <div className={clsx(
             'flex-1 min-h-0',
-            activeTab !== 'console' && activeTab !== 'preview' && 'overflow-y-auto',
+            activeTab === 'console' || activeTab === 'preview'
+              ? 'flex flex-col'
+              : 'overflow-y-auto',
           )}>
             {activeTab === 'plan' && (
               <TaskPlanView task={task} liveTask={liveTask} />
@@ -186,13 +209,11 @@ export default function TaskDetailPanel({ taskId }: TaskDetailPanelProps) {
             {activeTab === 'workspace' && hasWorkspace && (
               <TaskWorkspaceView task={task} />
             )}
-            {activeTab === 'preview' && hasWorkspace && (
-              <TaskPreviewView task={task} detail={detail} />
+            {activeTab === 'preview' && showPreview && (
+              <TaskPreviewView task={task} detail={detail} liveTask={liveTask} />
             )}
           </div>
 
-          {/* Follow-up input for completed tasks */}
-          {isTerminal && <TaskFollowUpInput taskId={taskId} />}
         </>
       )}
     </div>

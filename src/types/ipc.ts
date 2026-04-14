@@ -51,13 +51,20 @@ export const IPC_CHANNELS = {
 
   // Task terminal (PTY)
   TASK_TERMINAL_RESIZE: 'task-terminal:resize',
-  taskTerminalData: (runId: string) => `task-terminal:data:${runId}`,
+  TASK_TERMINAL_DATA: 'task-terminal:data',  // Global channel (Turbo pattern)
+  TASK_TERMINAL_INPUT: 'task-terminal:input',  // Renderer → main: write to PTY stdin
+  TASK_TERMINAL_READ_BUFFER: 'task-terminal:read-buffer',  // Renderer → main: load persisted buffer
+  TASK_TERMINAL_REMOVE_BUFFER: 'task-terminal:remove-buffer',  // Renderer → main: delete persisted buffer on task deletion
+  taskTerminalData: (runId: string) => `task-terminal:data:${runId}`,  // Legacy per-run
 
   // Sandbox
   SANDBOX_PICK_DIRECTORY: 'sandbox:pick-directory',
   SANDBOX_REVEAL_WORKSPACE: 'sandbox:reveal-workspace',
   SANDBOX_GET_PROFILE: 'sandbox:get-profile',
   SANDBOX_SET_CACHE: 'sandbox:set-cache',
+
+  // Shell
+  SHELL_OPEN_PATH: 'shell:open-path',
 } as const;
 
 // --- Backend Request/Response ---
@@ -251,10 +258,23 @@ export interface CerebroAPI {
   installer: InstallerAPI;
   voice: VoiceAPI;
   taskTerminal: TaskTerminalAPI;
+  shell: ShellAPI;
   sandbox: SandboxAPI;
 }
 
+export interface ShellAPI {
+  openPath(filePath: string): Promise<void>;
+}
+
 export interface TaskTerminalAPI {
+  /** Subscribe to ALL PTY data globally (Turbo pattern — single channel). */
+  onGlobalData(callback: (runId: string, data: string) => void): () => void;
   onData(runId: string, callback: (data: string) => void): () => void;
   resize(runId: string, cols: number, rows: number): void;
+  /** Forward user keystrokes to the PTY's stdin. */
+  sendInput(runId: string, data: string): void;
+  /** Load the persisted terminal buffer for a run from disk. Returns null if none. */
+  readBuffer(runId: string): Promise<string | null>;
+  /** Delete the persisted terminal buffer for a run. */
+  removeBuffer(runId: string): Promise<void>;
 }

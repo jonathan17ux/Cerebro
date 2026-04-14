@@ -234,6 +234,8 @@ const en = {
     previewFailed: 'Preview failed',
     failedToStartPreview: 'Failed to start preview server',
     previewStopped: 'Preview server stopped unexpectedly',
+    watchingForContent: 'Watching for content...',
+    watchingForContentHint: 'Preview will appear as files are created',
     followUpPlaceholder: 'Ask a follow-up...',
     taskNotFound: 'Task not found',
     cancelTask: 'Cancel task',

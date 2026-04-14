@@ -116,3 +116,9 @@ backend/venv/
 
 # Voice models (downloaded for dev, bundled in production)
 voice-models/
+
+# Playwright test artifacts
+playwright-report/
+test-results/
+e2e/screenshots/
+

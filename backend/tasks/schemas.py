@@ -103,6 +103,14 @@ class TaskFollowUpResponse(BaseModel):
     follow_up_context: str
 
 
+class TaskResumeResponse(BaseModel):
+    task_id: str
+    run_id: str
+    conversation_id: str
+    workspace_path: str | None = None
+    resume_session_id: str
+
+
 class TaskPlanUpsert(BaseModel):
     kind: Literal["markdown", "code_app", "mixed"] | None = None
     phases: list[PlanPhase]
@@ -206,6 +214,15 @@ class WorkspaceFileResponse(BaseModel):
     content: str
     language: str | None = None
     size: int
+    mtime: float | None = None
+
+
+class PreviewFileResponse(BaseModel):
+    found: bool
+    path: str | None = None
+    content: str | None = None
+    mtime: float | None = None
+    size: int | None = None
 
 
 # ── Dev server ───────────────────────────────────────────────────
@@ -218,6 +235,10 @@ class DevServerStatus(BaseModel):
     started_at: datetime | None = None
     stdout_tail: str | None = None
     preview_type: str | None = None
+
+
+class DevServerStartBody(BaseModel):
+    run_info: RunInfo | None = None
 
 
 class DevServerStartResponse(BaseModel):

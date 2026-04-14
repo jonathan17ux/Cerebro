@@ -157,6 +157,17 @@ def _resolve_inside_workspace(workspace_path: str, rel_path: str) -> str:
     return candidate
 
 
+def _prune_walk_dirs(dirnames: list[str], dirpath: str) -> None:
+    """Mutate *dirnames* in-place to skip excluded and symlinked dirs."""
+    dirnames[:] = [
+        d
+        for d in dirnames
+        if d not in _HARD_EXCLUDE_DIRS
+        and not d.startswith(".git")
+        and not os.path.islink(os.path.join(dirpath, d))
+    ]
+
+
 def list_tree(workspace_path: str) -> tuple[list[dict], bool]:
     """Return a flat listing of the workspace contents.
 
@@ -171,16 +182,7 @@ def list_tree(workspace_path: str) -> tuple[list[dict], bool]:
     truncated = False
 
     for dirpath, dirnames, filenames in os.walk(real_root, followlinks=False):
-        # Prune hard-excluded dirs in place (walk reads this list live)
-        dirnames[:] = [
-            d for d in dirnames
-            if d not in _HARD_EXCLUDE_DIRS and not d.startswith(".git")
-        ]
-        # Skip the symlinked .claude dir (it points outside the workspace)
-        dirnames[:] = [
-            d for d in dirnames
-            if not os.path.islink(os.path.join(dirpath, d))
-        ]
+        _prune_walk_dirs(dirnames, dirpath)
 
         rel_dir = os.path.relpath(dirpath, real_root)
         if rel_dir != ".":
@@ -244,4 +246,79 @@ def read_file(workspace_path: str, rel_path: str) -> dict:
         "content": content,
         "language": _LANG_BY_EXT.get(ext),
         "size": st.st_size,
+        "mtime": st.st_mtime,
     }
+
+
+def find_preview_file(
+    workspace_path: str,
+    known_path: str | None = None,
+) -> dict | None:
+    """Scan workspace for the best previewable HTML file.
+
+    Priority: index.html in root > any .html in root >
+    index.html in subdirs > any .html in subdirs.
+    Returns ``read_file``-style dict with ``mtime`` or ``None``.
+
+    When *known_path* is provided the scan is skipped and we read that
+    file directly — much cheaper for repeated polls.
+    """
+    if not os.path.isdir(workspace_path):
+        return None
+
+    if known_path is not None:
+        try:
+            return read_file(workspace_path, known_path)
+        except (FileNotFoundError, ValueError):
+            return None
+
+    real_root = os.path.realpath(workspace_path)
+
+    # 1. index.html in root
+    candidate = os.path.join(real_root, "index.html")
+    if os.path.isfile(candidate):
+        try:
+            return read_file(workspace_path, "index.html")
+        except (FileNotFoundError, ValueError):
+            pass
+
+    # 2. Any .html in root
+    try:
+        for name in sorted(os.listdir(real_root)):
+            if name.lower().endswith(".html") and os.path.isfile(
+                os.path.join(real_root, name)
+            ):
+                try:
+                    return read_file(workspace_path, name)
+                except (FileNotFoundError, ValueError):
+                    continue
+    except OSError:
+        pass
+
+    # 3. index.html or any .html in subdirectories
+    first_nested_html: str | None = None
+    for dirpath, dirnames, filenames in os.walk(real_root, followlinks=False):
+        _prune_walk_dirs(dirnames, dirpath)
+        if dirpath == real_root:
+            continue
+        for fn in sorted(filenames):
+            if not fn.lower().endswith(".html"):
+                continue
+            rel = os.path.relpath(
+                os.path.join(dirpath, fn), real_root
+            ).replace(os.sep, "/")
+            if fn.lower() == "index.html":
+                try:
+                    return read_file(workspace_path, rel)
+                except (FileNotFoundError, ValueError):
+                    continue
+            if first_nested_html is None:
+                first_nested_html = rel
+
+    if first_nested_html is not None:
+        try:
+            return read_file(workspace_path, first_nested_html)
+        except (FileNotFoundError, ValueError):
+            pass
+
+    return None

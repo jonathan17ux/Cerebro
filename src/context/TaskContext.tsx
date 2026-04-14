@@ -35,7 +35,7 @@ import i18n from '../i18n';
 
 // ── Context types ───────────────────────────────────────────────
 
-interface LiveTaskState {
+export interface LiveTaskState {
   taskId: string;
   runId: string;
   phase: 'clarify' | 'execute';
@@ -49,6 +49,8 @@ interface LiveTaskState {
   turnsUsed: number;
   // Accumulated parsed results (so done handler doesn't rely solely on flush)
   readySeen: boolean;
+  /** Set when <clarification> tag was detected and questions posted to backend. */
+  clarificationCaptured: boolean;
   deliverableMarkdown: string | null;
   deliverableTitle: string | null;
   runInfo: RunInfo | null;
@@ -68,6 +70,7 @@ interface TaskContextValue {
   createAndRunTask: (input: NewTaskInput) => Promise<Task>;
   submitClarification: (taskId: string, answers: Array<{ id: string; answer: string | boolean }>) => Promise<void>;
   followUpTask: (taskId: string, instruction: string, model?: string) => Promise<void>;
+  resumeTask: (taskId: string) => Promise<void>;
   cancelTask: (id: string) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   setSelectedTaskId: (id: string | null) => void;
@@ -132,6 +135,16 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [refresh]);
 
+  // Single IPC channel captures PTY data for ALL runs, subscribed once at mount.
+  // This avoids per-run subscription timing gaps — data buffers from the moment
+  // it flows, and Console components read the buffer on mount.
+  useEffect(() => {
+    const unsub = window.cerebro.taskTerminal.onGlobalData((runId, data) => {
+      appendTaskTerminalData(runId, data);
+    });
+    return unsub;
+  }, []);
+
   // ── Event flushing ────────────────────────────────────────────
 
   const flushEvents = useCallback(async (taskId: string) => {
@@ -165,7 +178,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 
   // ── Cleanup ───────────────────────────────────────────────────
 
-  const cleanup = useCallback(() => {
+  const cleanup = useCallback((preserveBuffer = false) => {
     if (unsubRef.current) {
       unsubRef.current();
       unsubRef.current = null;
@@ -175,9 +188,13 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       flushTimerRef.current = null;
     }
     parserRef.current = null;
-    // Clear the PTY terminal buffer for the completed run
-    const live = liveTaskRef.current;
-    if (live) clearTaskTerminalBuffer(live.runId);
+    // Clear the PTY terminal buffer only for completed/finalized runs.
+    // Running tasks keep their buffer so data isn't lost during
+    // unwatchTask/watchTask cycles triggered by status changes.
+    if (!preserveBuffer) {
+      const live = liveTaskRef.current;
+      if (live) clearTaskTerminalBuffer(live.runId);
+    }
   }, []);
 
   // ── Throttled UI update ──────────────────────────────────────
@@ -200,11 +217,18 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     if (e.type === 'ready') {
       live.readySeen = true;
     } else if (e.type === 'clarification') {
+      live.clarificationCaptured = true;
       void window.cerebro.invoke({
         method: 'POST',
         path: `/tasks/${live.taskId}/clarifications`,
         body: { questions: e.questions },
-      }).then(() => refresh());
+      }).then(() => {
+        // Kill the clarify subprocess — we captured the questions,
+        // continuing would just hit max-turns and error out.
+        void window.cerebro.agent.cancel(live.runId);
+        cleanup();
+        refresh();
+      });
     } else if (e.type === 'plan') {
       live.plan = e.plan;
       live.deliverableKind = e.kind;
@@ -289,8 +313,17 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Flush persisted events, THEN cleanup (so events aren't lost)
-    void flushEvents(live.taskId).then(() => cleanup());
+    // Flush persisted events, THEN cleanup — but capture the current unsub
+    // so that if autoStartExecute sets up a new subscription in the meantime,
+    // we don't tear down the NEW subscription (race condition fix).
+    // preserveBuffer=true so the Console tab can still replay PTY output
+    // after the task completes/fails.
+    const currentUnsub = unsubRef.current;
+    void flushEvents(live.taskId).then(() => {
+      if (unsubRef.current === currentUnsub) {
+        cleanup(true);
+      }
+    });
 
     if (live.phase === 'execute') {
       void window.cerebro.invoke({
@@ -330,7 +363,10 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         ),
       );
     } else if (live.phase === 'clarify') {
-      if (status === 'failed') {
+      if (status === 'failed' && !live.clarificationCaptured) {
+        // Only mark as failed if we never got a valid clarification.
+        // Race condition: Claude Code can hit max-turns and exit before
+        // the cancel fires — if questions were already captured, ignore.
         void window.cerebro.invoke({
           method: 'POST',
           path: `/tasks/${live.taskId}/finalize`,
@@ -424,6 +460,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       clarificationAnswers?: string,
       model?: string,
       followUp?: { content: string; context: string },
+      resumeSessionId?: string,
     ) => {
       const parserMode = phase === 'clarify' ? 'clarify' : 'execute';
       const parser = new TaskStreamParser(parserMode);
@@ -442,6 +479,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         logSeqCounter: 0,
         turnsUsed: 0,
         readySeen: false,
+        clarificationCaptured: false,
         deliverableMarkdown: null,
         deliverableTitle: null,
         runInfo: null,
@@ -455,21 +493,6 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       const unsub = window.cerebro.agent.onEvent(runId, handleStreamEvent);
       unsubRef.current = unsub;
 
-      // Buffer PTY terminal data globally so TaskConsoleView can replay
-      // on mount even if it renders after data started flowing.
-      // Subscribe BEFORE agent.run() to capture from the very first byte.
-      if (phase !== 'clarify') {
-        const unsubPty = window.cerebro.taskTerminal.onData(runId, (data: string) => {
-          appendTaskTerminalData(runId, data);
-        });
-        // Store the PTY unsub alongside the event unsub
-        const originalUnsub = unsub;
-        unsubRef.current = () => {
-          originalUnsub();
-          unsubPty();
-        };
-      }
-
       flushTimerRef.current = setInterval(() => {
         void flushEvents(task.id);
       }, FLUSH_INTERVAL_MS);
@@ -479,7 +502,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         content: followUp?.content ?? task.goal,
         runType: 'task',
         taskPhase: followUp ? 'follow_up' : phase,
-        maxTurns: phase === 'clarify' ? 5 : task.max_turns,
+        maxTurns: phase === 'clarify' ? 15 : task.max_turns,
         maxPhases: task.max_phases,
         maxClarifyQuestions: 5,
         runIdOverride: runId,
@@ -488,6 +511,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         model,
         followUpContext: followUp?.context,
         language: i18n.language !== 'en' ? i18n.language : undefined,
+        resumeSessionId,
       });
     },
     [handleStreamEvent, flushEvents],
@@ -541,7 +565,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         goal: input.goal,
         expert_hint_id: input.expertHintId ?? null,
         template_id: input.templateId ?? null,
-        max_turns: input.maxTurns ?? 60,
+        max_turns: input.maxTurns ?? 30,
         max_phases: input.maxPhases ?? 6,
         skip_clarification: input.skipClarification ?? false,
       },
@@ -672,6 +696,42 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     await refresh();
   }, [cleanup, startSubprocess, refresh]);
 
+  const resumeTask = useCallback(async (taskId: string) => {
+    cleanup();
+
+    const res = await window.cerebro.invoke<{
+      task_id: string;
+      run_id: string;
+      conversation_id: string;
+      workspace_path: string | null;
+      resume_session_id: string;
+    }>({
+      method: 'POST',
+      path: `/tasks/${taskId}/resume`,
+    });
+    if (!res.ok) throw new Error('Failed to resume task');
+
+    const taskRes = await window.cerebro.invoke<Task>({
+      method: 'GET',
+      path: `/tasks/${taskId}`,
+    });
+    if (!taskRes.ok) throw new Error('Failed to fetch task');
+
+    await startSubprocess(
+      taskRes.data,
+      'execute',
+      res.data.run_id,
+      res.data.conversation_id,
+      res.data.workspace_path,
+      undefined,
+      undefined,
+      undefined,
+      res.data.resume_session_id,
+    );
+
+    await refresh();
+  }, [cleanup, startSubprocess, refresh]);
+
   const cancelTask = useCallback(async (id: string) => {
     const live = liveTaskRef.current;
     if (live && live.taskId === id && live.runId) {
@@ -688,7 +748,12 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   }, [cleanup, refresh]);
 
   const deleteTask = useCallback(async (id: string) => {
-    if (liveTaskRef.current?.taskId === id) {
+    const task = tasks.find((tk) => tk.id === id);
+    const live = liveTaskRef.current;
+    if (live && live.taskId === id) {
+      if (live.runId) {
+        await window.cerebro.agent.cancel(live.runId);
+      }
       cleanup();
       liveTaskRef.current = null;
       setLiveTask(null);
@@ -697,9 +762,14 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       method: 'DELETE',
       path: `/tasks/${id}`,
     });
+    // Remove the persisted terminal buffer file so disk doesn't accumulate orphans.
+    const runIdToPurge = live?.taskId === id ? live.runId : task?.run_id ?? null;
+    if (runIdToPurge) {
+      void window.cerebro.taskTerminal.removeBuffer(runIdToPurge);
+    }
     if (selectedTaskId === id) setSelectedTaskId(null);
     await refresh();
-  }, [cleanup, refresh, selectedTaskId]);
+  }, [tasks, cleanup, refresh, selectedTaskId]);
 
   const watchTask = useCallback(async (id: string) => {
     const res = await window.cerebro.invoke<TaskDetail>({
@@ -744,6 +814,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         logSeqCounter: maxSeq + 1,
         turnsUsed: 0,
         readySeen: false,
+        clarificationCaptured: false,
         deliverableMarkdown: null,
         deliverableTitle: null,
         runInfo: null,
@@ -783,6 +854,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
           logSeqCounter: maxSeq + 1,
           turnsUsed: 0,
           readySeen: false,
+        clarificationCaptured: false,
           deliverableMarkdown: null,
           deliverableTitle: null,
           runInfo: null,
@@ -804,7 +876,11 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     // Flush any pending events before tearing down so logs persist
     const live = liveTaskRef.current;
     if (live) void flushEvents(live.taskId);
-    cleanup();
+    // Always preserve the PTY buffer — the Console tab needs it to replay
+    // the real terminal output (with colors, tool calls, etc.) when the user
+    // navigates back to a completed task. Buffer is only cleared on task
+    // deletion or when a new follow-up run starts.
+    cleanup(true);
     liveTaskRef.current = null;
     setLiveTask(null);
   }, [cleanup, flushEvents]);
@@ -830,6 +906,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     createAndRunTask,
     submitClarification,
     followUpTask,
+    resumeTask,
     cancelTask,
     deleteTask,
     setSelectedTaskId,

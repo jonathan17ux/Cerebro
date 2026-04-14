@@ -6,6 +6,11 @@ import net from 'node:net';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import started from 'electron-squirrel-startup';
+
+// Enable remote debugging for E2E tests (Playwright connects via CDP)
+if (process.env.CEREBRO_E2E_DEBUG_PORT) {
+  app.commandLine.appendSwitch('remote-debugging-port', process.env.CEREBRO_E2E_DEBUG_PORT);
+}
 import { IPC_CHANNELS } from './types/ipc';
 import type {
   BackendRequest,
@@ -504,6 +509,18 @@ function registerIpcHandlers(): void {
     return agentRuntime.getActiveRuns();
   });
 
+  // Read persisted terminal buffer from disk (for post-restart replay)
+  ipcMain.handle(IPC_CHANNELS.TASK_TERMINAL_READ_BUFFER, async (_event, runId: string) => {
+    if (!agentRuntime) return null;
+    return agentRuntime.terminalBufferStore.read(runId);
+  });
+
+  // Remove persisted terminal buffer (called when a task is deleted)
+  ipcMain.handle(IPC_CHANNELS.TASK_TERMINAL_REMOVE_BUFFER, async (_event, runId: string) => {
+    if (!agentRuntime) return;
+    agentRuntime.terminalBufferStore.remove(runId);
+  });
+
   // --- Execution Engine ---
 
   ipcMain.handle(IPC_CHANNELS.ENGINE_RUN, async (event, request: EngineRunRequest) => {
@@ -650,6 +667,13 @@ function registerIpcHandlers(): void {
         /* fall through — showItemInFolder will just focus the parent */
       }
       shell.showItemInFolder(workspacePath);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SHELL_OPEN_PATH,
+    async (_event, filePath: string) => {
+      await shell.openPath(filePath);
     },
   );
 

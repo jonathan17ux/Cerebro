@@ -1,7 +1,17 @@
 /**
  * Generates a macOS Seatbelt (sandbox-exec) profile for the Claude Code
- * subprocess. Writes are narrow (workspace + tmp + ~/.claude + RW-linked
- * projects); reads are broad enough for Node/npm/pip/rust toolchains to run.
+ * subprocess.
+ *
+ * Security model:
+ *   - Reads: allow everything, deny specific sensitive paths (credentials,
+ *     mail, etc.). Claude Code + Node.js need to read from many system and
+ *     user-library paths that are impractical to enumerate; the deny rules
+ *     provide the real protection.
+ *   - Writes: narrow — workspace, ~/.claude, ~/.local, ~/Library/Caches,
+ *     tmp dirs, and RW-linked projects. This is the main sandbox value:
+ *     preventing the subprocess from modifying files outside its workspace.
+ *   - Deny rules override allows (Seatbelt last-match-wins), so sensitive
+ *     paths are protected even with broad read access.
  *
  * Forbidden zones are passed in from the caller (sourced from the backend
  * validation list) rather than hardcoded here — a single source of truth.
@@ -10,24 +20,6 @@
 import os from 'node:os';
 import path from 'node:path';
 import type { SandboxConfig } from './types';
-
-// Read-allow paths under the user's home. Needed so Node/npm/pip/rust toolchains
-// function under the sandbox. Writes to these are NOT granted.
-const HOME_READ_SUBDIRS: readonly string[] = [
-  '.nvm',
-  '.npm',
-  '.node_modules',
-  '.cache',
-  '.cargo',
-  '.rustup',
-  '.pyenv',
-  '.local',
-  '.asdf',
-  '.config',
-  '.npmrc',
-  '.yarnrc',
-  '.yarn',
-];
 
 function quoteSubpath(kind: 'subpath' | 'literal', value: string): string {
   // Seatbelt string literals don't support backslash escaping. Refuse anything
@@ -50,58 +42,26 @@ export function generateProfile(inputs: ProfileInputs): string {
   const workspace = path.resolve(inputs.workspacePath);
   const cerebroData = path.resolve(inputs.cerebroDataDir);
 
-  const readTargets = new Set<string>();
   const writeTargets = new Set<string>();
 
   // Baseline writable targets.
   writeTargets.add(workspace);
   writeTargets.add(cerebroData);
   writeTargets.add(path.join(home, '.claude'));
+  // Claude Code stores auth/session state under ~/.local/{state,share}/claude
+  // and caches under ~/Library/Caches/claude-cli-nodejs.
+  writeTargets.add(path.join(home, '.local'));
+  writeTargets.add(path.join(home, 'Library', 'Caches'));
   writeTargets.add('/private/var/folders');
   writeTargets.add('/private/tmp');
   writeTargets.add('/private/var/tmp');
 
-  // Linked projects — all readable, writable only when mode === 'write'.
+  // Linked projects — writable when mode === 'write'.
   for (const link of inputs.linkedProjects) {
-    const resolved = path.resolve(link.path);
-    readTargets.add(resolved);
     if (link.mode === 'write') {
-      writeTargets.add(resolved);
+      writeTargets.add(path.resolve(link.path));
     }
   }
-
-  // Everything we can write, we can also read.
-  for (const target of writeTargets) {
-    readTargets.add(target);
-  }
-
-  // System toolchain read access.
-  const systemReads = [
-    '/System',
-    '/usr',
-    '/bin',
-    '/sbin',
-    '/Library',
-    '/opt',
-    '/private/var/folders',
-    '/private/tmp',
-    '/private/var/tmp',
-    '/private/etc',
-    '/private/var/db/mds',
-    '/private/var/db/timezone',
-    '/dev',
-    '/Applications',
-  ];
-  for (const p of systemReads) readTargets.add(p);
-
-  for (const sub of HOME_READ_SUBDIRS) {
-    readTargets.add(path.join(home, sub));
-  }
-
-  const readLines = [...readTargets]
-    .sort()
-    .map((p) => '  ' + quoteSubpath('subpath', p))
-    .join('\n');
 
   const writeLines = [...writeTargets]
     .sort()
@@ -113,7 +73,16 @@ export function generateProfile(inputs: ProfileInputs): string {
   const forbiddenPaths = inputs.forbiddenHomeSubpaths.length > 0
     ? inputs.forbiddenHomeSubpaths
     : ['.ssh'];
-  const denyLines = forbiddenPaths
+
+  // Library/Keychains is in the forbidden list to prevent linking, but must
+  // NOT be denied in the sandbox — Claude Code needs keychain access for OAuth.
+  // Keychain items have their own per-app ACLs so this doesn't expose other
+  // apps' stored credentials.
+  const sandboxForbidden = forbiddenPaths.filter((p) => p !== 'Library/Keychains');
+  // Ensure we still have at least one entry
+  const effectiveForbidden = sandboxForbidden.length > 0 ? sandboxForbidden : ['.ssh'];
+
+  const denyLines = effectiveForbidden
     .map((sub) => '  ' + quoteSubpath('subpath', path.join(home, sub)))
     .join('\n');
 
@@ -141,10 +110,19 @@ export function generateProfile(inputs: ProfileInputs): string {
 ;; or pf rules — outside the v1 scope).
 (allow network*)
 
+;; ── Pipes / PTY / ioctl ──
+;; file-write-data covers stdout/stderr pipe writes and data writes to
+;; already-open file descriptors. file-ioctl is needed by Node.js for
+;; terminal/socket operations. pseudo-tty enables PTY for terminal output.
+(allow file-write-data)
+(allow file-ioctl)
+(allow pseudo-tty)
+
 ;; ── File reads ──
-(allow file-read*
-${readLines}
-)
+;; Broad read access — Claude Code + Node.js read from many system and
+;; user-library paths (toolchains, caches, auth state). The deny rules
+;; below protect credentials and sensitive data.
+(allow file-read* (subpath "/"))
 
 ;; ── File writes ──
 (allow file-write*
@@ -152,9 +130,9 @@ ${writeLines}
 )
 
 ;; ── Forbidden zones (defence in depth) ──
-;; The base policy is already deny-default, so these deny lines only matter
-;; if someone adds an allow rule above that accidentally covers a sensitive
-;; path. Keep them as a backstop.
+;; These deny rules override the broad read-allow above for sensitive paths.
+;; Write denies prevent modification even if the path falls inside an
+;; allowed write subpath (e.g. ~/.local covers ~/.gnupg on some layouts).
 (deny file-read*
 ${denyLines}
 )

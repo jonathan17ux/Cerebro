@@ -170,6 +170,12 @@ const api: CerebroAPI = {
   },
 
   taskTerminal: {
+    onGlobalData(callback: (runId: string, data: string) => void): () => void {
+      const handler = (_event: Electron.IpcRendererEvent, runId: string, data: string) =>
+        callback(runId, data);
+      ipcRenderer.on(IPC_CHANNELS.TASK_TERMINAL_DATA, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.TASK_TERMINAL_DATA, handler);
+    },
     onData(runId: string, callback: (data: string) => void): () => void {
       const channel = IPC_CHANNELS.taskTerminalData(runId);
       const handler = (_event: Electron.IpcRendererEvent, data: string) => callback(data);
@@ -178,6 +184,21 @@ const api: CerebroAPI = {
     },
     resize(runId: string, cols: number, rows: number): void {
       ipcRenderer.send(IPC_CHANNELS.TASK_TERMINAL_RESIZE, runId, cols, rows);
+    },
+    sendInput(runId: string, data: string): void {
+      ipcRenderer.send(IPC_CHANNELS.TASK_TERMINAL_INPUT, runId, data);
+    },
+    readBuffer(runId: string): Promise<string | null> {
+      return ipcRenderer.invoke(IPC_CHANNELS.TASK_TERMINAL_READ_BUFFER, runId);
+    },
+    removeBuffer(runId: string): Promise<void> {
+      return ipcRenderer.invoke(IPC_CHANNELS.TASK_TERMINAL_REMOVE_BUFFER, runId);
+    },
+  },
+
+  shell: {
+    openPath(filePath: string): Promise<void> {
+      return ipcRenderer.invoke(IPC_CHANNELS.SHELL_OPEN_PATH, filePath);
     },
   },
 

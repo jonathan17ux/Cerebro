@@ -39,10 +39,10 @@ const TEMPLATES = [
 export default function NewTaskDialog({ open, onClose, onSubmit, initialGoal }: NewTaskDialogProps) {
   const { t } = useTranslation();
   const [goal, setGoal] = useState(initialGoal ?? '');
-  const [skipClarification, setSkipClarification] = useState(false);
+  const [skipClarification, setSkipClarification] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [maxPhases, setMaxPhases] = useState(6);
-  const [maxTurns, setMaxTurns] = useState(60);
+  const [maxTurns, setMaxTurns] = useState(30);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [model, setModel] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -218,9 +218,9 @@ export default function NewTaskDialog({ open, onClose, onSubmit, initialGoal }: 
                 </label>
                 <input
                   type="range"
-                  min={30}
-                  max={120}
-                  step={10}
+                  min={5}
+                  max={50}
+                  step={5}
                   value={maxTurns}
                   onChange={(e) => setMaxTurns(Number(e.target.value))}
                   className="w-full accent-accent"

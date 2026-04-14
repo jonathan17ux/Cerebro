@@ -1,22 +1,22 @@
 /**
- * TaskConsoleView — real terminal powered by xterm.js + node-pty.
+ * TaskConsoleView — xterm.js terminal showing raw Claude Code PTY output.
  *
- * Subscribes to raw PTY data from the main process via IPC and writes
- * it directly to xterm. This is the EXACT Claude Code CLI output —
- * colors, tool boxes, spinners, everything.
- *
- * For completed tasks, replays persisted events (text_delta) to
- * reconstruct the terminal view from history.
- *
- * Follows Turbo's XTermRenderer patterns.
+ * On mount: replay the in-memory buffer, fall back to the on-disk buffer
+ * (post-restart), then subscribe to live PTY data. The in-rAF ordering
+ * guarantees no gap between replay and live subscription (JS is single-threaded).
+ * WebGL renderer is required — the DOM renderer drops cells under Ink's
+ * rapid redraws (plan-mode prompt).
  */
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown, Play } from 'lucide-react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
+import { useTasks } from '../../../context/TaskContext';
 import { getTaskTerminalBuffer } from './taskTerminalBuffer';
 import type { Task, TaskLogEntry } from './types';
 
@@ -34,9 +34,8 @@ const THEME = {
   foreground: '#e4e4ef',
   cursor: '#e4e4ef',
   cursorAccent: '#0a0a0f',
-  selectionBackground: '#06b6d440',
-  selectionForeground: undefined,
-  black: '#18181b',
+  selectionBackground: '#6366f140',
+  black: '#1a1a25',
   red: '#ef4444',
   green: '#22c55e',
   yellow: '#f59e0b',
@@ -56,18 +55,24 @@ const THEME = {
 
 export default function TaskConsoleView({ task, liveTask }: TaskConsoleViewProps) {
   const { t } = useTranslation();
+  const { resumeTask } = useTasks();
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
-  const subscribedRunIdRef = useRef<string | null>(null);
-  // Track how many historical logEntries we've written (for fallback replay)
-  const historicalWrittenRef = useRef(0);
+  const [isResuming, setIsResuming] = useState(false);
+  const hasPtyDataRef = useRef(false);
+  const writtenCountRef = useRef(0);
 
   const isLive = liveTask?.taskId === task.id;
   const runId = isLive ? liveTask!.runId : task.run_id;
+  const taskIsActive = task.status === 'running' || task.status === 'clarifying' || task.status === 'planning';
+  const taskIsTerminal = task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled';
 
-  // Track last-sent PTY dims to skip no-op resize IPC (same as Turbo)
+  // Use a ref for runId so sendResizeIfChanged is stable (no runId dep)
+  const runIdRef = useRef(runId);
+  runIdRef.current = runId;
+
   const lastColsRef = useRef(0);
   const lastRowsRef = useRef(0);
 
@@ -76,7 +81,6 @@ export default function TaskConsoleView({ task, liveTask }: TaskConsoleViewProps
     if (el && el.clientWidth > 0 && el.clientHeight > 0) {
       try {
         fitRef.current?.fit();
-        // Force full redraw after fit to prevent stale pixels (Turbo pattern)
         termRef.current?.refresh(0, (termRef.current?.rows ?? 1) - 1);
       } catch { /* detached */ }
     }
@@ -84,52 +88,108 @@ export default function TaskConsoleView({ task, liveTask }: TaskConsoleViewProps
 
   const sendResizeIfChanged = useCallback(() => {
     const terminal = termRef.current;
-    if (!terminal || !runId) return;
+    const rid = runIdRef.current;
+    if (!terminal || !rid) return;
     const { cols, rows } = terminal;
     if (cols === lastColsRef.current && rows === lastRowsRef.current) return;
     lastColsRef.current = cols;
     lastRowsRef.current = rows;
-    window.cerebro.taskTerminal.resize(runId, cols, rows);
-  }, [runId]);
+    window.cerebro.taskTerminal.resize(rid, cols, rows);
+  }, []);
 
-  // ── Terminal lifecycle ─────────────────────────────────────
+  // ── Terminal lifecycle + PTY subscription (Turbo pattern) ────
 
   useEffect(() => {
     if (!containerRef.current) return;
     let disposed = false;
+    let unsubPty: (() => void) | null = null;
 
     const terminal = new Terminal({
       convertEol: true,
-      disableStdin: true,
       scrollback: 10_000,
       fontSize: 13,
-      fontFamily: "'Geist Mono', 'SF Mono', 'Menlo', ui-monospace, monospace",
+      fontFamily: "'Geist Mono', 'SF Mono', 'Menlo', monospace",
       lineHeight: 1.4,
-      cursorBlink: false,
+      cursorBlink: true,
+      cursorStyle: 'bar',
       allowProposedApi: true,
       theme: THEME,
     });
 
+    // Forward user keystrokes to the PTY's stdin (accept trust dialog, type, etc.)
+    terminal.onData((data) => {
+      const rid = runIdRef.current;
+      if (rid) {
+        window.cerebro.taskTerminal.sendInput(rid, data);
+      }
+    });
+
     const fitAddon = new FitAddon();
+    const webLinksAddon = new WebLinksAddon();
+
     terminal.loadAddon(fitAddon);
+    terminal.loadAddon(webLinksAddon);
     terminal.open(containerRef.current);
+
+    // WebGL renderer — fixes cell-clearing artifacts under rapid TUI redraws
+    // (Ink's plan-mode prompt stacks text on the default DOM renderer).
+    let webglAddon: WebglAddon | null = null;
+    try {
+      const addon = new WebglAddon();
+      addon.onContextLoss(() => {
+        addon.dispose();
+        webglAddon = null;
+        terminal.refresh(0, terminal.rows - 1);
+      });
+      terminal.loadAddon(addon);
+      webglAddon = addon;
+    } catch (err) {
+      console.warn('[TaskConsoleView] WebGL renderer unavailable, falling back to DOM', err);
+    }
 
     termRef.current = terminal;
     fitRef.current = fitAddon;
-    subscribedRunIdRef.current = null;
-    historicalWrittenRef.current = 0;
-
-    requestAnimationFrame(() => {
-      if (!disposed) {
-        safeFit();
-        sendResizeIfChanged();
-      }
-    });
+    writtenCountRef.current = 0;
+    hasPtyDataRef.current = false;
 
     terminal.onScroll(() => {
       if (disposed) return;
       const buf = terminal.buffer.active;
       setShowScrollBtn(buf.viewportY < buf.baseY);
+    });
+
+    // Subscribe to PTY data inside rAF — after buffer replay, before any
+    // new data can arrive (JS is single-threaded within the rAF callback).
+    requestAnimationFrame(() => {
+      if (disposed) return;
+      safeFit();
+
+      const rid = runIdRef.current;
+      if (rid) {
+        // 1. Replay in-memory buffer (fastest, covers current session)
+        const buffered = getTaskTerminalBuffer(rid);
+        if (buffered) {
+          hasPtyDataRef.current = true;
+          terminal.write(buffered);
+        } else {
+          // 2. Fallback: load persisted buffer from disk (survives app restart)
+          window.cerebro.taskTerminal.readBuffer(rid).then((persisted) => {
+            if (disposed || !persisted || !termRef.current) return;
+            hasPtyDataRef.current = true;
+            termRef.current.write(persisted);
+          }).catch(() => { /* non-fatal */ });
+        }
+      }
+
+      // Subscribe DIRECTLY to IPC for live PTY data
+      unsubPty = window.cerebro.taskTerminal.onGlobalData((dataRunId, data) => {
+        if (dataRunId === runIdRef.current) {
+          hasPtyDataRef.current = true;
+          termRef.current?.write(data);
+        }
+      });
+
+      sendResizeIfChanged();
     });
 
     const handleWindowFocus = () => {
@@ -158,10 +218,19 @@ export default function TaskConsoleView({ task, liveTask }: TaskConsoleViewProps
     });
     observer.observe(containerRef.current);
 
+    // Focus terminal — delay slightly so tab animation settles
+    terminal.focus();
+    const focusTimer = setTimeout(() => terminal.focus(), 150);
+
     return () => {
       disposed = true;
+      clearTimeout(focusTimer);
+      unsubPty?.();
       observer.disconnect();
       window.removeEventListener('focus', handleWindowFocus);
+      if (webglAddon) {
+        try { webglAddon.dispose(); } catch { /* xterm-internal teardown race */ }
+      }
       try { fitAddon.dispose(); } catch { /* teardown race */ }
       terminal.dispose();
       termRef.current = null;
@@ -169,67 +238,26 @@ export default function TaskConsoleView({ task, liveTask }: TaskConsoleViewProps
     };
   }, [task.id, safeFit, sendResizeIfChanged]);
 
-  // ── PTY data: buffer replay + live subscription ─────────────
-  // Same pattern as Turbo's XTermRenderer: replay buffered data
-  // FIRST (captured globally by TaskContext), THEN subscribe to
-  // live data. Single-threaded JS ensures no gap between the two.
-
+  // ── Text-delta fallback (completed tasks only) ─────────────
   useEffect(() => {
     const terminal = termRef.current;
-    if (!terminal || !runId) return;
-    if (subscribedRunIdRef.current === runId) return;
-
-    let unsub: (() => void) | null = null;
-    let localDisposed = false;
-
-    requestAnimationFrame(() => {
-      if (localDisposed || !termRef.current) return;
-
-      // 1. Replay any buffered data from before this component mounted
-      const buffered = getTaskTerminalBuffer(runId);
-      if (buffered) {
-        termRef.current.write(buffered);
-      }
-
-      // 2. NOW subscribe to live data — buffer replay complete, no duplicates
-      if (isLive) {
-        unsub = window.cerebro.taskTerminal.onData(runId, (data: string) => {
-          if (termRef.current) termRef.current.write(data);
-        });
-        subscribedRunIdRef.current = runId;
-      }
-    });
-
-    return () => {
-      localDisposed = true;
-      unsub?.();
-      subscribedRunIdRef.current = null;
-    };
-  }, [runId, isLive]);
-
-  // ── Replay historical events for completed tasks ────────────
-  // For tasks that are no longer live, replay text_delta entries
-  // from logEntries as plain text. This won't have full CLI
-  // formatting but shows the content.
-
-  useEffect(() => {
-    const terminal = termRef.current;
-    if (!terminal || isLive) return;
+    if (!terminal) return;
+    if (hasPtyDataRef.current) return;
+    if (taskIsActive) return;
 
     const entries = liveTask?.taskId === task.id ? liveTask.logEntries : [];
     if (entries.length === 0) return;
 
     const count = entries.length;
-    if (count <= historicalWrittenRef.current) return;
+    if (count <= writtenCountRef.current) return;
 
-    // Write only new entries
-    for (let i = historicalWrittenRef.current; i < count; i++) {
+    for (let i = writtenCountRef.current; i < count; i++) {
       const entry = entries[i];
       if (entry.kind === 'text_delta') {
         terminal.write(entry.text);
       }
     }
-    historicalWrittenRef.current = count;
+    writtenCountRef.current = count;
   });
 
   const handleScrollToBottom = useCallback(() => {
@@ -237,13 +265,23 @@ export default function TaskConsoleView({ task, liveTask }: TaskConsoleViewProps
     setShowScrollBtn(false);
   }, []);
 
-  // Show empty state only if no live task and no historical data
-  const hasEntries = isLive || (liveTask?.taskId === task.id && liveTask.logEntries.length > 0);
-  if (!hasEntries && !isLive) {
-    const isRunning = task.status === 'running' || task.status === 'clarifying';
+  const handleResume = useCallback(async () => {
+    if (isResuming) return;
+    setIsResuming(true);
+    try {
+      await resumeTask(task.id);
+    } catch (err) {
+      console.error('Resume failed:', err);
+    } finally {
+      setIsResuming(false);
+    }
+  }, [isResuming, resumeTask, task.id]);
+
+  const hasRun = !!runId;
+  if (!hasRun) {
     return (
       <div className="flex-1 flex items-center justify-center text-text-tertiary text-sm py-16">
-        {isRunning ? t('taskDetail.waitingForOutput') : t('taskDetail.noOutput')}
+        {t('taskDetail.noOutput')}
       </div>
     );
   }
@@ -253,8 +291,20 @@ export default function TaskConsoleView({ task, liveTask }: TaskConsoleViewProps
       <div
         ref={containerRef}
         className="w-full h-full"
+        onClick={() => termRef.current?.focus()}
       />
-      {showScrollBtn && (
+      {taskIsTerminal && (
+        <button
+          onClick={handleResume}
+          disabled={isResuming}
+          className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-xs font-medium hover:bg-accent/90 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer transition-colors shadow-lg z-10"
+          title="Resume this session where it left off"
+        >
+          {isResuming ? 'Resuming...' : 'Resume'}
+          <Play size={14} fill="currentColor" />
+        </button>
+      )}
+      {showScrollBtn && !taskIsTerminal && (
         <button
           onClick={handleScrollToBottom}
           className="absolute bottom-4 right-4 p-2 rounded-full bg-bg-secondary border border-border-subtle text-text-secondary hover:text-text-primary shadow-lg cursor-pointer transition-colors z-10"

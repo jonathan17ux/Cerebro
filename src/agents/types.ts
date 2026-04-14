@@ -45,7 +45,7 @@ export interface AgentRunRequest {
   runType?: 'chat' | 'task';
   /** Which task subprocess phase: 'clarify' (short question pass), 'execute' (full run), or 'follow_up'. */
   taskPhase?: 'clarify' | 'execute' | 'follow_up';
-  /** Override --max-turns. Default: 15 (chat), 5 (clarify), 60 (execute/follow_up). */
+  /** Override --max-turns. Default: 15 (chat), 5 (clarify), 10 (execute/follow_up). */
   maxTurns?: number;
   /** Maximum plan phases (injected into the execute envelope). Default 6. */
   maxPhases?: number;
@@ -63,6 +63,11 @@ export interface AgentRunRequest {
   followUpContext?: string;
   /** UI language code (e.g. "es"). When set and not "en", the AI is instructed to respond in that language. */
   language?: string;
+  /** Initial terminal dimensions for task PTY (matches xterm viewport). */
+  cols?: number;
+  rows?: number;
+  /** Resume a prior Claude Code session by its ID (equal to the original run_id). */
+  resumeSessionId?: string;
 }
 
 // ── Events sent to renderer ─────────────────────────────────────

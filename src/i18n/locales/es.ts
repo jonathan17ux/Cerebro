@@ -237,6 +237,8 @@ const es: TranslationKeys = {
     previewFailed: 'Vista previa fallida',
     failedToStartPreview: 'Error al iniciar el servidor de vista previa',
     previewStopped: 'El servidor de vista previa se detuvo inesperadamente',
+    watchingForContent: 'Buscando contenido...',
+    watchingForContentHint: 'La vista previa aparecerá cuando se creen archivos',
     followUpPlaceholder: 'Haz una pregunta de seguimiento...',
     taskNotFound: 'Tarea no encontrada',
     cancelTask: 'Cancelar tarea',

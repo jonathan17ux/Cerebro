@@ -281,8 +281,10 @@ class Task(Base):
         String(32), ForeignKey("run_records.id", ondelete="SET NULL"),
         nullable=True, index=True,
     )
+    # Tracking ID passed to agent.run() — NOT a FK to conversations.
+    # Tasks are fully independent from the chat conversations system.
     conversation_id: Mapped[str | None] = mapped_column(
-        String(32), ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True
+        String(32), nullable=True
     )
 
     plan_json: Mapped[str | None] = mapped_column(Text, nullable=True)

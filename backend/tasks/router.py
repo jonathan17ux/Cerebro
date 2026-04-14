@@ -9,7 +9,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 
 from database import get_db
 from models import (
-    Conversation,
     RunRecord,
     Task,
     TaskEvent,
@@ -21,7 +20,9 @@ from engine.schemas import RunRecordResponse
 from .schemas import (
     ClarifyResponse,
     ClarifySubmit,
+    DevServerStartBody,
     DevServerStatus,
+    PreviewFileResponse,
     RunInfo,
     TaskCreate,
     TaskDetailResponse,
@@ -35,12 +36,13 @@ from .schemas import (
     TaskPlan,
     TaskPlanUpsert,
     TaskResponse,
+    TaskResumeResponse,
     TaskRunStart,
     TaskRunStartResponse,
     WorkspaceFileResponse,
     WorkspaceTreeResponse,
 )
-from .workspace import create_workspace, delete_workspace, list_tree, read_file
+from .workspace import create_workspace, delete_workspace, find_preview_file, list_tree, read_file
 
 router = APIRouter(tags=["tasks"])
 
@@ -242,12 +244,23 @@ def delete_task(task_id: str, request: Request, db=Depends(get_db)):
     except Exception:
         pass
 
+    # Null FK before deleting the RunRecord so SQLite doesn't trip on the
+    # task.run_id → run_records.id constraint.
+    prior_run_id = task.run_id
+    if prior_run_id:
+        task.run_id = None
+        db.flush()
+        db.query(RunRecord).filter(RunRecord.id == prior_run_id).delete(
+            synchronize_session=False
+        )
+
     # Delete workspace (with realpath-prefix safety check inside)
     try:
         delete_workspace(_data_dir(request), task_id)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # TaskEvent rows cascade-delete via FK ondelete="CASCADE"
     db.delete(task)
     db.commit()
     return Response(status_code=204)
@@ -264,13 +277,10 @@ def start_task_run(task_id: str, body: TaskRunStart, request: Request, db=Depend
 
     data_dir = _data_dir(request)
 
-    # Ensure conversation exists (one per task, reused across clarify+execute)
-    conv_id = task.conversation_id
-    if not conv_id:
-        conv_id = _uuid_hex()
-        conv = Conversation(id=conv_id, title=task.title[:255] or "Task")
-        db.add(conv)
-        task.conversation_id = conv_id
+    # Tasks are fully independent from conversations — no Conversation row.
+    # Mint a tracking ID for the frontend (passed to agent.run()) but do NOT
+    # store it on task.conversation_id to avoid FK constraint with conversations table.
+    tracking_id = _uuid_hex()
 
     # Workspace is always created (cheap, needed even for markdown tasks
     # as scratch space — and must live under data_dir for sandbox writes)
@@ -282,7 +292,6 @@ def start_task_run(task_id: str, body: TaskRunStart, request: Request, db=Depend
     run_id = _uuid_hex()
     run = RunRecord(
         id=run_id,
-        conversation_id=conv_id,
         run_type="task",
         trigger="manual",
         status="running",
@@ -303,7 +312,7 @@ def start_task_run(task_id: str, body: TaskRunStart, request: Request, db=Depend
     return TaskRunStartResponse(
         task_id=task_id,
         run_id=run_id,
-        conversation_id=conv_id,
+        conversation_id=tracking_id,
         workspace_path=workspace_path,
     )
 
@@ -435,8 +444,12 @@ def finalize_task(task_id: str, body: TaskFinalize, db=Depends(get_db)):
             run.status = body.status if body.status != "cancelled" else "cancelled"
             run.completed_at = _utcnow()
             if run.started_at:
+                # Strip tzinfo for subtraction — _utcnow() is tz-aware but
+                # values loaded from SQLite are tz-naive.
+                completed = run.completed_at.replace(tzinfo=None)
+                started = run.started_at.replace(tzinfo=None) if run.started_at.tzinfo else run.started_at
                 run.duration_ms = int(
-                    (run.completed_at - run.started_at).total_seconds() * 1000
+                    (completed - started).total_seconds() * 1000
                 )
             if body.error:
                 run.error = body.error
@@ -507,19 +520,13 @@ def follow_up_task(task_id: str, body: TaskFollowUp, request: Request, db=Depend
         workspace_path = create_workspace(data_dir, task_id)
         task.workspace_path = workspace_path
 
-    # Ensure conversation exists
-    conv_id = task.conversation_id
-    if not conv_id:
-        conv_id = _uuid_hex()
-        conv = Conversation(id=conv_id, title=task.title[:255] or "Task")
-        db.add(conv)
-        task.conversation_id = conv_id
+    # Tasks are independent from conversations — just a tracking ID for agent.run()
+    tracking_id = _uuid_hex()
 
     # Mint a new run_record for this follow-up
     run_id = _uuid_hex()
     run = RunRecord(
         id=run_id,
-        conversation_id=conv_id,
         run_type="task",
         trigger="follow_up",
         status="running",
@@ -559,9 +566,63 @@ def follow_up_task(task_id: str, body: TaskFollowUp, request: Request, db=Depend
     return TaskFollowUpResponse(
         task_id=task_id,
         run_id=run_id,
-        conversation_id=conv_id,
+        conversation_id=tracking_id,
         workspace_path=workspace_path,
         follow_up_context=follow_up_context,
+    )
+
+
+@router.post("/{task_id}/resume", response_model=TaskResumeResponse)
+def resume_task(task_id: str, request: Request, db=Depends(get_db)):
+    """Resume a terminal task by restarting Claude Code with --resume <prior_run_id>.
+
+    Reuses the same workspace. The Claude CLI session ID equals the prior
+    run_id (set via --session-id on original spawn), so Claude will pick up
+    the conversation where it left off.
+    """
+    task = db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.status not in ("completed", "failed", "cancelled"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot resume a task with status '{task.status}' — task must be terminal",
+        )
+
+    prior_run_id = task.run_id
+    if not prior_run_id:
+        raise HTTPException(status_code=400, detail="Task has no prior run to resume")
+
+    data_dir = _data_dir(request)
+
+    workspace_path = task.workspace_path
+    if not workspace_path:
+        workspace_path = create_workspace(data_dir, task_id)
+        task.workspace_path = workspace_path
+
+    tracking_id = _uuid_hex()
+    run_id = _uuid_hex()
+    run = RunRecord(
+        id=run_id,
+        run_type="task",
+        trigger="resume",
+        status="running",
+        parent_run_id=None,
+    )
+    db.add(run)
+    task.run_id = run_id
+    task.status = "running"
+    task.error = None
+    task.completed_at = None
+    db.commit()
+
+    return TaskResumeResponse(
+        task_id=task_id,
+        run_id=run_id,
+        conversation_id=tracking_id,
+        workspace_path=workspace_path,
+        resume_session_id=prior_run_id,
     )
 
 
@@ -650,27 +711,76 @@ def get_workspace_file(
     return WorkspaceFileResponse(**result)
 
 
+@router.get("/{task_id}/workspace/preview-file", response_model=PreviewFileResponse)
+def get_preview_file(
+    task_id: str,
+    request: Request,
+    known_path: str | None = Query(None, description="Skip scan; read this path directly"),
+    if_mtime_neq: float | None = Query(None, description="Return content only when mtime differs"),
+    db=Depends(get_db),
+):
+    task = db.get(Task, task_id)
+    if not task or not task.workspace_path:
+        return PreviewFileResponse(found=False)
+    result = find_preview_file(task.workspace_path, known_path=known_path)
+    if result is None:
+        return PreviewFileResponse(found=False)
+    # When caller already has this mtime, skip sending content
+    if if_mtime_neq is not None and result["mtime"] == if_mtime_neq:
+        return PreviewFileResponse(
+            found=True,
+            path=result["path"],
+            mtime=result["mtime"],
+            size=result["size"],
+        )
+    return PreviewFileResponse(
+        found=True,
+        path=result["path"],
+        content=result["content"],
+        mtime=result["mtime"],
+        size=result["size"],
+    )
+
+
 # ── Dev server ───────────────────────────────────────────────────
 
 
 @router.post("/{task_id}/dev-server/start")
-def start_dev_server(task_id: str, request: Request, db=Depends(get_db)):
+def start_dev_server(
+    task_id: str,
+    body: DevServerStartBody | None = None,
+    *,
+    request: Request,
+    db=Depends(get_db),
+):
     task = db.get(Task, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    if not task.run_info_json or not task.workspace_path:
+    if not task.workspace_path:
+        raise HTTPException(status_code=400, detail="Task has no workspace")
+
+    # Accept run_info from body (live mode) or fall back to DB
+    run_info: RunInfo | None = None
+    if body and body.run_info:
+        run_info = body.run_info
+        # Persist so status endpoint works
+        if not task.run_info_json:
+            task.run_info_json = run_info.model_dump_json()
+            db.commit()
+    elif task.run_info_json:
+        try:
+            run_info = RunInfo(**json.loads(task.run_info_json))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"invalid run_info: {exc}") from exc
+
+    if not run_info:
         raise HTTPException(
             status_code=400,
-            detail="Task has no run_info or workspace — not a code_app",
+            detail="Task has no run_info — not a code_app",
         )
 
     from .dev_server import get_registry
     registry = get_registry(request.app)
-
-    try:
-        run_info = RunInfo(**json.loads(task.run_info_json))
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"invalid run_info: {exc}") from exc
 
     pid = registry.start(task_id, task.workspace_path, run_info)
     return {"task_id": task_id, "pid": pid, "stream_url": f"/tasks/{task_id}/dev-server/stream"}
