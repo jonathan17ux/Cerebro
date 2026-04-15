@@ -197,14 +197,14 @@ function CanvasInner({ routine }: { routine: Routine }) {
           />
         </ReactFlow>
 
-        {/* Empty state overlay — only show when no step nodes */}
+        {/* Empty state hint — sits at the bottom so it doesn't collide with the trigger node */}
         {stepNodes.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="text-center">
-              <p className="text-sm text-text-tertiary mb-1">
+          <div className="absolute left-0 right-0 bottom-6 flex justify-center pointer-events-none">
+            <div className="text-center px-3 py-2 rounded-md bg-bg-base/70 backdrop-blur border border-border-subtle/60">
+              <p className="text-xs text-text-tertiary mb-1">
                 Drag an action from the sidebar to get started
               </p>
-              <p className="text-xs text-text-tertiary/60">
+              <p className="text-[11px] text-text-tertiary/70">
                 Press <kbd className="px-1 py-0.5 bg-bg-hover rounded text-[10px]">A</kbd> to open actions
                 {' '}&middot;{' '}
                 <kbd className="px-1 py-0.5 bg-bg-hover rounded text-[10px]">Shift+N</kbd> for sticky note

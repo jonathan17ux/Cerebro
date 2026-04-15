@@ -59,8 +59,10 @@ export interface ActionCategory {
   colorHex: string;     // Hex for canvas rendering
 }
 
+export const TRIGGER_TEAL = '#14b8a6';
+
 export const ACTION_CATEGORIES: ActionCategory[] = [
-  { id: 'triggers',     name: 'Triggers',     icon: Zap,          color: 'teal',    colorHex: '#14b8a6' },
+  { id: 'triggers',     name: 'Triggers',     icon: Zap,          color: 'teal',    colorHex: TRIGGER_TEAL },
   { id: 'ai',           name: 'AI',           icon: Brain,        color: 'violet',  colorHex: '#8b5cf6' },
   { id: 'knowledge',    name: 'Knowledge',    icon: BookOpen,     color: 'indigo',  colorHex: '#6366f1' },
   { id: 'integrations', name: 'Integrations', icon: Plug2,        color: 'blue',    colorHex: '#3b82f6' },
@@ -91,7 +93,7 @@ export const ACTION_META: Record<string, ActionMeta> = {
     name: 'Schedule',
     icon: Zap,
     color: 'teal',
-    colorHex: '#14b8a6',
+    colorHex: TRIGGER_TEAL,
     description: 'Run on a cron schedule',
     category: 'triggers',
     isAvailable: true,
@@ -101,7 +103,7 @@ export const ACTION_META: Record<string, ActionMeta> = {
     name: 'Manual',
     icon: Zap,
     color: 'teal',
-    colorHex: '#14b8a6',
+    colorHex: TRIGGER_TEAL,
     description: 'Run with a button click',
     category: 'triggers',
     isAvailable: true,
@@ -111,7 +113,7 @@ export const ACTION_META: Record<string, ActionMeta> = {
     name: 'Webhook',
     icon: Zap,
     color: 'teal',
-    colorHex: '#14b8a6',
+    colorHex: TRIGGER_TEAL,
     description: 'Run when HTTP POST arrives',
     category: 'triggers',
     isAvailable: true,
@@ -121,7 +123,7 @@ export const ACTION_META: Record<string, ActionMeta> = {
     name: 'App Event',
     icon: Zap,
     color: 'teal',
-    colorHex: '#14b8a6',
+    colorHex: TRIGGER_TEAL,
     description: 'Run on external app event',
     category: 'triggers',
     isAvailable: false,

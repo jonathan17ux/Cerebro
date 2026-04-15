@@ -11,10 +11,12 @@ import {
   useNodesState,
   useEdgesState,
   addEdge,
+  applyNodeChanges,
   MarkerType,
   type Node,
   type Edge,
   type Connection,
+  type NodeChange,
 } from '@xyflow/react';
 import type { Routine } from '../types/routines';
 import type { RoutineStepData, CanvasDefinition } from '../utils/dag-flow-mapping';
@@ -90,7 +92,7 @@ export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export function useRoutineCanvas(routine: Routine) {
   const { updateRoutine } = useRoutines();
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [nodes, setNodes, baseOnNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [triggerNode, setTriggerNode] = useState<Node | null>(null);
   const [annotationNodes, setAnnotationNodes] = useState<Node[]>([]);
@@ -152,6 +154,43 @@ export function useRoutineCanvas(routine: Routine) {
     result.push(...annotationNodes);
     return result;
   }, [triggerNode, nodes, annotationNodes]);
+
+  // ReactFlow emits one onNodesChange stream for every rendered node, but our
+  // state lives in three slices. Route each change to the right setter so that
+  // drags, selection toggles, and dimension updates land on stickies and the
+  // trigger — not just step nodes.
+  const annotationIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    annotationIdsRef.current = new Set(annotationNodes.map((n) => n.id));
+  }, [annotationNodes]);
+
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const stepChanges: NodeChange[] = [];
+      const annotationChanges: NodeChange[] = [];
+      const triggerChanges: NodeChange[] = [];
+
+      for (const ch of changes) {
+        const id = 'id' in ch ? ch.id : undefined;
+        if (id === '__trigger__') triggerChanges.push(ch);
+        else if (id && annotationIdsRef.current.has(id)) annotationChanges.push(ch);
+        else stepChanges.push(ch);
+      }
+
+      if (stepChanges.length) baseOnNodesChange(stepChanges);
+      if (annotationChanges.length) {
+        setAnnotationNodes((curr) => applyNodeChanges(annotationChanges, curr));
+      }
+      if (triggerChanges.length) {
+        setTriggerNode((curr) => {
+          if (!curr) return curr;
+          const [next] = applyNodeChanges(triggerChanges, [curr]);
+          return next ?? curr;
+        });
+      }
+    },
+    [baseOnNodesChange],
+  );
 
   // ── Add step node ──
 

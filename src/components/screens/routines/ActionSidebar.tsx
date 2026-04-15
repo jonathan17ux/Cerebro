@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Search, Plus } from 'lucide-react';
 import {
   ACTION_META,
@@ -7,6 +8,7 @@ import {
   type ActionCategory,
 } from '../../../utils/step-defaults';
 import ActionCategoryGroup from './ActionCategoryGroup';
+import Tooltip from '../../ui/Tooltip';
 
 interface ActionSidebarProps {
   isOpen: boolean;
@@ -15,6 +17,7 @@ interface ActionSidebarProps {
 }
 
 export default function ActionSidebar({ isOpen, onClose, onOpen }: ActionSidebarProps) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -51,14 +54,16 @@ export default function ActionSidebar({ isOpen, onClose, onOpen }: ActionSidebar
       {/* Floating "Add Action" pill — visible when sidebar is closed */}
       {!isOpen && (
         <div className="absolute bottom-4 left-4 z-20">
-          <button
-            onClick={onOpen}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-bg-surface border border-border-subtle text-text-secondary hover:text-accent hover:border-accent/30 transition-colors shadow-lg"
-            aria-label="Add action"
-          >
-            <Plus size={16} />
-            <span className="text-sm font-medium">Add Action</span>
-          </button>
+          <Tooltip label={t('routineTooltips.addAction')} side="right">
+            <button
+              onClick={onOpen}
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-bg-surface border border-border-subtle text-text-secondary hover:text-accent hover:border-accent/30 transition-colors shadow-lg"
+              aria-label={t('routineTooltips.addAction')}
+            >
+              <Plus size={16} />
+              <span className="text-sm font-medium">Add Action</span>
+            </button>
+          </Tooltip>
         </div>
       )}
 
@@ -75,27 +80,32 @@ export default function ActionSidebar({ isOpen, onClose, onOpen }: ActionSidebar
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
           <span className="text-sm font-semibold text-text-primary">Add Action</span>
-          <button
-            onClick={onClose}
-            className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-bg-hover transition-colors"
-          >
-            <X size={14} />
-          </button>
+          <Tooltip label={t('routineTooltips.closeSidebar')} shortcut="Esc">
+            <button
+              onClick={onClose}
+              aria-label={t('routineTooltips.closeSidebar')}
+              className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-bg-hover transition-colors"
+            >
+              <X size={14} />
+            </button>
+          </Tooltip>
         </div>
 
         {/* Search */}
         <div className="px-3 py-2 border-b border-border-subtle">
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
-            <input
-              ref={searchRef}
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search..."
-              className="w-full h-8 pl-8 pr-3 text-xs bg-bg-base border border-border-subtle rounded-md text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/50"
-              tabIndex={isOpen ? 0 : -1}
-            />
+            <Tooltip label={t('routineTooltips.searchActions')} side="bottom">
+              <input
+                ref={searchRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search..."
+                className="w-full h-8 pl-8 pr-3 text-xs bg-bg-base border border-border-subtle rounded-md text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/50"
+                tabIndex={isOpen ? 0 : -1}
+              />
+            </Tooltip>
           </div>
         </div>
 

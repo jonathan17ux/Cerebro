@@ -1,12 +1,12 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { describeCron } from '../../../utils/cron-helpers';
 import { HANDLE_COLORS } from '../../../utils/handle-types';
-
-const TEAL = '#14b8a6';
+import { TRIGGER_TEAL as TEAL } from '../../../utils/step-defaults';
+import Tooltip, { TooltipCard } from '../../ui/Tooltip';
 
 interface TriggerData {
   triggerType: string;
@@ -50,55 +50,69 @@ function TriggerNode({ data, selected }: NodeProps) {
     }
   })();
 
-  return (
-    <div
-      className={clsx(
-        'w-[260px] rounded-lg border bg-teal-500/5 transition-all duration-150',
-        selected
-          ? 'shadow-lg'
-          : 'border-border-subtle hover:border-border-default',
-      )}
-      style={{
-        borderLeftWidth: 4,
-        borderLeftColor: TEAL,
-        ...(selected
-          ? {
-              borderColor: TEAL,
-              boxShadow: `0 0 12px ${TEAL}40`,
-            }
-          : {}),
-      }}
-    >
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
-        <div
-          className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: `${TEAL}20` }}
-        >
-          <Zap size={12} style={{ color: TEAL }} />
-        </div>
-        <span
-          className="text-[10px] font-medium uppercase tracking-wider"
-          style={{ color: TEAL }}
-        >
-          {label}
-        </span>
-      </div>
-
-      {/* Detail */}
-      <div className="px-3 pb-3">
-        <span className="text-sm text-text-secondary block truncate">
-          {detail}
-        </span>
-      </div>
-
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        className="!border-bg-surface !w-2 !h-2"
-        style={{ backgroundColor: HANDLE_COLORS.signal }}
+  const hoverCard = useMemo(
+    () => (
+      <TooltipCard
+        title={label}
+        description={detail}
+        hint={t('routineTooltips.triggerNodeHint')}
       />
-    </div>
+    ),
+    [label, detail, t],
+  );
+
+  return (
+    <Tooltip label={hoverCard} size="md" side="top" delay={500}>
+      <div
+        className={clsx(
+          'w-[260px] rounded-lg border bg-teal-500/5 transition-all duration-150',
+          selected
+            ? 'shadow-lg'
+            : 'border-border-subtle hover:border-border-default',
+        )}
+        style={{
+          borderLeftWidth: 4,
+          borderLeftColor: TEAL,
+          ...(selected
+            ? {
+                borderColor: TEAL,
+                boxShadow: `0 0 12px ${TEAL}40`,
+              }
+            : {}),
+        }}
+      >
+        {/* Header */}
+        <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
+          <div
+            className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
+            style={{ backgroundColor: `${TEAL}20` }}
+          >
+            <Zap size={12} style={{ color: TEAL }} />
+          </div>
+          <span
+            className="text-[10px] font-medium uppercase tracking-wider"
+            style={{ color: TEAL }}
+          >
+            {label}
+          </span>
+        </div>
+
+        {/* Detail */}
+        <div className="px-3 pb-3">
+          <span className="text-sm text-text-secondary block truncate">
+            {detail}
+          </span>
+        </div>
+
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          className="!border-bg-surface !w-2 !h-2"
+          style={{ backgroundColor: HANDLE_COLORS.signal }}
+          title={t('routineTooltips.nodeHandleSource')}
+        />
+      </div>
+    </Tooltip>
   );
 }
 

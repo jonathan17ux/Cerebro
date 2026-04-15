@@ -20,6 +20,7 @@ import { useRoutines } from '../../../context/RoutineContext';
 import Toggle from '../../ui/Toggle';
 import AlertModal from '../../ui/AlertModal';
 import SchedulePicker from '../../ui/SchedulePicker';
+import Tooltip from '../../ui/Tooltip';
 import NotifyChannelsPopover from './NotifyChannelsPopover';
 import type { DayOfWeek } from '../../../utils/cron-helpers';
 import { cronToSchedule, scheduleToCron, describeSchedule, WEEKDAYS } from '../../../utils/cron-helpers';
@@ -141,31 +142,37 @@ export default function EditorToolbar({
   return (
     <div className="flex items-center gap-3 px-4 py-2.5 bg-bg-surface border-b border-border-subtle flex-shrink-0 z-20">
       {/* Left: Back + Name */}
-      <button
-        onClick={() => setEditingRoutineId(null)}
-        aria-label="Back to routine list"
-        className="p-1.5 rounded-md text-text-tertiary hover:text-text-secondary hover:bg-bg-hover transition-colors"
-      >
-        <ArrowLeft size={16} />
-      </button>
+      <Tooltip label={t('routineTooltips.back')} side="bottom">
+        <button
+          onClick={() => setEditingRoutineId(null)}
+          aria-label={t('routineTooltips.back')}
+          className="p-1.5 rounded-md text-text-tertiary hover:text-text-secondary hover:bg-bg-hover transition-colors"
+        >
+          <ArrowLeft size={16} />
+        </button>
+      </Tooltip>
 
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onBlur={handleNameBlur}
-        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-        className="text-sm font-medium text-text-primary bg-transparent border-none outline-none hover:bg-bg-hover focus:bg-bg-elevated rounded px-2 py-1 transition-colors min-w-[120px] max-w-[280px]"
-      />
+      <Tooltip label={t('routineTooltips.editName')} side="bottom">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={handleNameBlur}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          className="text-sm font-medium text-text-primary bg-transparent border-none outline-none hover:bg-bg-hover focus:bg-bg-elevated rounded px-2 py-1 transition-colors min-w-[120px] max-w-[280px]"
+        />
+      </Tooltip>
 
       {/* Center: Trigger pill */}
       <div className="relative" ref={triggerRef}>
-        <button
-          onClick={() => setShowTriggerMenu((prev) => !prev)}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-bg-elevated text-text-secondary border border-border-subtle hover:border-border-default transition-colors"
-        >
-          <TriggerIcon size={11} />
-          {t(currentTrigger.labelKey)}
-        </button>
+        <Tooltip label={t('routineTooltips.triggerSelector')} side="bottom">
+          <button
+            onClick={() => setShowTriggerMenu((prev) => !prev)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-bg-elevated text-text-secondary border border-border-subtle hover:border-border-default transition-colors"
+          >
+            <TriggerIcon size={11} />
+            {t(currentTrigger.labelKey)}
+          </button>
+        </Tooltip>
 
         {showTriggerMenu && (
           <div className="absolute top-full left-0 mt-1 bg-bg-elevated border border-border-subtle rounded-lg shadow-lg py-1 min-w-[140px] z-50">
@@ -194,14 +201,21 @@ export default function EditorToolbar({
       {/* Schedule picker popover */}
       {routine.triggerType === 'cron' && (
         <div className="relative" ref={scheduleRef}>
-          <button
-            onClick={() => setShowSchedulePicker((prev) => !prev)}
-            className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-bg-elevated text-text-tertiary border border-border-subtle hover:border-border-default hover:text-text-secondary transition-colors"
+          <Tooltip
+            label={t(
+              existingSchedule ? 'routineTooltips.schedule' : 'routineTooltips.scheduleEmpty',
+            )}
+            side="bottom"
           >
-            {existingSchedule
-              ? describeSchedule({ days: scheduleDays, time: scheduleTime })
-              : t('routineEditor.setSchedule')}
-          </button>
+            <button
+              onClick={() => setShowSchedulePicker((prev) => !prev)}
+              className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-bg-elevated text-text-tertiary border border-border-subtle hover:border-border-default hover:text-text-secondary transition-colors"
+            >
+              {existingSchedule
+                ? describeSchedule({ days: scheduleDays, time: scheduleTime })
+                : t('routineEditor.setSchedule')}
+            </button>
+          </Tooltip>
 
           {showSchedulePicker && (
             <div className="absolute top-full left-0 mt-1 bg-bg-elevated border border-border-subtle rounded-lg shadow-lg p-3 min-w-[280px] z-50">
@@ -223,57 +237,85 @@ export default function EditorToolbar({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2">
-        <button
-          onClick={onAutoLayout}
-          disabled={!hasNodes}
-          className="p-1.5 rounded-md text-text-tertiary hover:text-text-secondary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          aria-label="Auto-layout"
+        <Tooltip
+          label={
+            hasNodes
+              ? t('routineTooltips.autoLayout')
+              : t('routineTooltips.autoLayoutEmpty')
+          }
+          side="bottom"
         >
-          <LayoutGrid size={15} />
-        </button>
+          <span className="inline-flex">
+            <button
+              onClick={onAutoLayout}
+              disabled={!hasNodes}
+              className="p-1.5 rounded-md text-text-tertiary hover:text-text-secondary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              aria-label={t('routineTooltips.autoLayout')}
+            >
+              <LayoutGrid size={15} />
+            </button>
+          </span>
+        </Tooltip>
 
-        <button
-          onClick={() => setShowDeleteConfirm(true)}
-          className="p-1.5 rounded-md text-text-tertiary hover:text-red-400 hover:bg-red-400/10 transition-colors"
-          title="Delete routine"
+        <Tooltip label={t('routineTooltips.deleteRoutine')} side="bottom" variant="accent">
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="p-1.5 rounded-md text-text-tertiary hover:text-red-400 hover:bg-red-400/10 transition-colors"
+            aria-label={t('routineTooltips.deleteRoutine')}
+          >
+            <Trash2 size={15} />
+          </button>
+        </Tooltip>
+
+        <Tooltip
+          label={t(
+            routine.isEnabled
+              ? 'routineTooltips.toggleEnabledOn'
+              : 'routineTooltips.toggleEnabledOff',
+          )}
+          side="bottom"
         >
-          <Trash2 size={15} />
-        </button>
-
-        <div className="flex items-center gap-1.5">
-          <Power
-            size={12}
-            className={clsx(
-              routine.isEnabled ? 'text-green-400' : 'text-text-tertiary',
-            )}
-          />
-          <Toggle
-            checked={routine.isEnabled}
-            onChange={() => toggleEnabled(routine)}
-          />
-        </div>
+          <div className="flex items-center gap-1.5">
+            <Power
+              size={12}
+              className={clsx(
+                routine.isEnabled ? 'text-green-400' : 'text-text-tertiary',
+              )}
+            />
+            <Toggle
+              checked={routine.isEnabled}
+              onChange={() => toggleEnabled(routine)}
+            />
+          </div>
+        </Tooltip>
 
         {/* Autosave status indicator */}
         {saveStatus === 'saving' && (
-          <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-tertiary">
-            <Loader2 size={13} className="animate-spin" />
-            Saving...
-          </span>
+          <Tooltip label={t('routineTooltips.saveStatusSaving')} side="bottom">
+            <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-tertiary">
+              <Loader2 size={13} className="animate-spin" />
+              Saving...
+            </span>
+          </Tooltip>
         )}
         {saveStatus === 'saved' && (
-          <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-green-400">
-            <Check size={13} />
-            Saved
-          </span>
+          <Tooltip label={t('routineTooltips.saveStatusSaved')} side="bottom">
+            <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-green-400">
+              <Check size={13} />
+              Saved
+            </span>
+          </Tooltip>
         )}
         {saveStatus === 'error' && (
-          <button
-            onClick={onSave}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
-          >
-            <AlertCircle size={13} />
-            Save failed — retry
-          </button>
+          <Tooltip label={t('routineTooltips.saveStatusError')} side="bottom" variant="accent">
+            <button
+              onClick={onSave}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
+            >
+              <AlertCircle size={13} />
+              Save failed — retry
+            </button>
+          </Tooltip>
         )}
         {saveStatus === 'idle' && isDirty && (
           <span className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-tertiary/60">
@@ -281,15 +323,23 @@ export default function EditorToolbar({
           </span>
         )}
 
-        <button
-          onClick={() => runRoutine(routine.id)}
-          disabled={!routine.isEnabled || !routine.dagJson || saveStatus === 'saving'}
-          title={saveStatus === 'saving' ? t('routineEditor.savingInProgress') : undefined}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-bg-elevated text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        <Tooltip
+          label={
+            saveStatus === 'saving'
+              ? t('routineEditor.savingInProgress')
+              : t('routineTooltips.run')
+          }
+          side="bottom"
         >
-          <Play size={13} />
-          Run
-        </button>
+          <button
+            onClick={() => runRoutine(routine.id)}
+            disabled={!routine.isEnabled || !routine.dagJson || saveStatus === 'saving'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-bg-elevated text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            <Play size={13} />
+            Run
+          </button>
+        </Tooltip>
       </div>
 
       {/* Delete Confirm Dialog */}

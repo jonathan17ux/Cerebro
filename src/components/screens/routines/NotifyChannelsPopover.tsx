@@ -6,6 +6,7 @@ import type { NotifyChannel, Routine } from '../../../types/routines';
 import { useRoutines } from '../../../context/RoutineContext';
 import { loadSetting } from '../../../lib/settings';
 import { TELEGRAM_SETTING_KEYS } from '../../../telegram/types';
+import Tooltip from '../../ui/Tooltip';
 
 interface Props {
   routine: Routine;
@@ -71,21 +72,30 @@ export default function NotifyChannelsPopover({ routine }: Props) {
 
   return (
     <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className={clsx(
-          'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors',
+      <Tooltip
+        label={
           hasAny
-            ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
-            : 'bg-bg-elevated text-text-secondary border border-border-subtle hover:border-border-default',
-        )}
-        title={t('routineEditor.notifyOnCompletion')}
+            ? t('routineTooltips.notifyCount', { count: current.length })
+            : t('routineTooltips.notify')
+        }
+        side="bottom"
       >
-        <Bell size={11} />
-        {hasAny
-          ? t('routineEditor.notifyCount', { count: current.length })
-          : `${t('routineEditor.notifyOnCompletion')} · ${t('routineEditor.notifyViaTelegram')}`}
-      </button>
+        <button
+          onClick={() => setOpen((v) => !v)}
+          aria-label={t('routineEditor.notifyOnCompletion')}
+          className={clsx(
+            'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors',
+            hasAny
+              ? 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
+              : 'bg-bg-elevated text-text-secondary border border-border-subtle hover:border-border-default',
+          )}
+        >
+          <Bell size={11} />
+          {hasAny
+            ? t('routineEditor.notifyCount', { count: current.length })
+            : `${t('routineEditor.notifyOnCompletion')} · ${t('routineEditor.notifyViaTelegram')}`}
+        </button>
+      </Tooltip>
 
       {open && (
         <div className="absolute top-full left-0 mt-1 bg-bg-elevated border border-border-subtle rounded-lg shadow-lg p-3 min-w-[260px] z-50">
@@ -109,32 +119,37 @@ export default function NotifyChannelsPopover({ routine }: Props) {
                   (c) => c.channel === 'telegram' && c.recipient === id,
                 );
                 return (
-                  <label
+                  <Tooltip
                     key={id}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-bg-hover cursor-pointer"
+                    label={t('routineTooltips.notifyTelegramRecipient')}
+                    side="right"
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleRecipient(id)}
-                      className="accent-sky-400"
-                    />
-                    <span className="text-[11px] font-mono text-text-secondary">Telegram · {id}</span>
-                  </label>
+                    <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-bg-hover cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleRecipient(id)}
+                        className="accent-sky-400"
+                      />
+                      <span className="text-[11px] font-mono text-text-secondary">Telegram · {id}</span>
+                    </label>
+                  </Tooltip>
                 );
               })}
             </div>
           )}
 
           {hasAny && (
-            <button
-              type="button"
-              onClick={removeAll}
-              className="mt-3 flex items-center gap-1 text-[11px] text-text-tertiary hover:text-red-400 transition-colors"
-            >
-              <Trash2 size={11} />
-              {t('routineEditor.notifyClear')}
-            </button>
+            <Tooltip label={t('routineTooltips.notifyClearAll')}>
+              <button
+                type="button"
+                onClick={removeAll}
+                className="mt-3 flex items-center gap-1 text-[11px] text-text-tertiary hover:text-red-400 transition-colors"
+              >
+                <Trash2 size={11} />
+                {t('routineEditor.notifyClear')}
+              </button>
+            </Tooltip>
           )}
           {!hasAny && allowlist.length > 0 && (
             <div className="mt-3 text-[11px] text-text-tertiary flex items-center gap-1">

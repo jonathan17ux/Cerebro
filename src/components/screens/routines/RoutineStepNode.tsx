@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { Shield } from 'lucide-react';
@@ -6,6 +6,7 @@ import clsx from 'clsx';
 import { ACTION_META, CATEGORY_MAP, resolveActionType } from '../../../utils/step-defaults';
 import { getHandleType, HANDLE_COLORS } from '../../../utils/handle-types';
 import type { RoutineStepData } from '../../../utils/dag-flow-mapping';
+import Tooltip, { TooltipCard } from '../../ui/Tooltip';
 
 /** Background tint per category (Tailwind-compatible). */
 const CATEGORY_BG: Record<string, string> = {
@@ -136,76 +137,98 @@ function RoutineStepNode({ data, selected }: NodeProps) {
     return '';
   })();
 
+  const hoverCard = useMemo(() => {
+    const rows: Array<{ label: string; value: string }> = [];
+    if (meta?.description) rows.push({ label: t('routineTooltips.metaAction'), value: meta.description });
+    if (preview) rows.push({ label: t('routineTooltips.metaConfig'), value: preview });
+    if (d.requiresApproval) rows.push({ label: t('routineTooltips.metaGate'), value: t('routineTooltips.approvalRequired') });
+    if (d.onError) rows.push({ label: t('routineTooltips.metaOnError'), value: String(d.onError) });
+    return (
+      <TooltipCard
+        title={d.name || meta?.name || d.actionType}
+        description={meta?.name ?? d.actionType}
+        meta={rows}
+        hint={t('routineTooltips.stepNodeHint')}
+      />
+    );
+  }, [d.name, d.actionType, d.requiresApproval, d.onError, meta, preview, t]);
+
   return (
-    <div
-      className={clsx(
-        'w-[200px] rounded-lg border transition-all duration-150',
-        CATEGORY_BG[category ?? ''] || 'bg-bg-surface',
-        selected
-          ? 'shadow-lg'
-          : 'hover:border-border-default',
-        !selected && 'border-border-subtle',
-      )}
-      style={{
-        borderLeftWidth: 4,
-        borderLeftColor: categoryColor,
-        ...(selected
-          ? {
-              borderColor: categoryColor,
-              boxShadow: `0 0 12px ${categoryColor}40`,
-            }
-          : {}),
-      }}
-    >
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="!border-bg-surface !w-2 !h-2"
-        style={{ backgroundColor: handleColor }}
-      />
+    <Tooltip label={hoverCard} size="md" side="right" delay={500}>
+      <div
+        className={clsx(
+          'w-[200px] rounded-lg border transition-all duration-150',
+          CATEGORY_BG[category ?? ''] || 'bg-bg-surface',
+          selected
+            ? 'shadow-lg'
+            : 'hover:border-border-default',
+          !selected && 'border-border-subtle',
+        )}
+        style={{
+          borderLeftWidth: 4,
+          borderLeftColor: categoryColor,
+          ...(selected
+            ? {
+                borderColor: categoryColor,
+                boxShadow: `0 0 12px ${categoryColor}40`,
+              }
+            : {}),
+        }}
+      >
+        <Handle
+          type="target"
+          position={Position.Top}
+          className="!border-bg-surface !w-2 !h-2"
+          style={{ backgroundColor: handleColor }}
+          title={t('routineTooltips.nodeHandleTarget')}
+        />
 
-      {/* Top row: icon + type label */}
-      <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
-        {Icon && (
-          <div
-            className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
-            style={{ backgroundColor: `${colorHex}20` }}
+        {/* Top row: icon + type label */}
+        <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
+          {Icon && (
+            <div
+              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
+              style={{ backgroundColor: `${colorHex}20` }}
+            >
+              <Icon size={12} style={{ color: colorHex }} />
+            </div>
+          )}
+          <span
+            className="text-[10px] font-medium uppercase tracking-wider"
+            style={{ color: colorHex }}
           >
-            <Icon size={12} style={{ color: colorHex }} />
-          </div>
-        )}
-        <span
-          className="text-[10px] font-medium uppercase tracking-wider"
-          style={{ color: colorHex }}
-        >
-          {meta?.name ?? d.actionType}
-        </span>
-        {d.requiresApproval && (
-          <Shield size={11} className="text-amber-400 ml-auto flex-shrink-0" />
-        )}
-      </div>
+            {meta?.name ?? d.actionType}
+          </span>
+          {d.requiresApproval && (
+            <span className="ml-auto flex-shrink-0">
+              <Shield size={11} className="text-amber-400" />
+            </span>
+          )}
+        </div>
 
-      {/* Step name */}
-      <div className="px-3 pb-1">
-        <span className="text-sm font-medium text-text-primary truncate block">
-          {d.name}
-        </span>
-      </div>
+        {/* Step name */}
+        <div className="px-3 pb-1">
+          <span className="text-sm font-medium text-text-primary truncate block">
+            {d.name}
+          </span>
+        </div>
 
-      {/* Preview */}
-      <div className="px-3 pb-2.5">
-        <span className="text-[11px] text-text-tertiary truncate block">
-          {preview}
-        </span>
-      </div>
+        {/* Preview */}
+        <div className="px-3 pb-2.5">
+          <span className="text-[11px] text-text-tertiary truncate block">
+            {preview}
+          </span>
+        </div>
 
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        className="!border-bg-surface !w-2 !h-2"
-        style={{ backgroundColor: handleColor }}
-      />
-    </div>
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          className="!border-bg-surface !w-2 !h-2"
+          style={{ backgroundColor: handleColor }}
+          title={t('routineTooltips.nodeHandleSource')}
+        />
+      </div>
+    </Tooltip>
   );
 }
 

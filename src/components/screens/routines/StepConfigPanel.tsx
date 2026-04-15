@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Shield } from 'lucide-react';
+import { X, Shield, Info } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { Node } from '@xyflow/react';
 import type { RoutineStepData } from '../../../utils/dag-flow-mapping';
 import { ACTION_META, resolveActionType } from '../../../utils/step-defaults';
 import Toggle from '../../ui/Toggle';
+import Tooltip from '../../ui/Tooltip';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -18,10 +20,18 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
-function FieldLabel({ text }: { text: string }) {
+function FieldLabel({ text, hint }: { text: string; hint?: string }) {
+  const { t } = useTranslation();
   return (
-    <label className="block text-[10px] font-medium text-text-tertiary uppercase tracking-wide mb-1">
-      {text}
+    <label className="flex items-center gap-1 text-[10px] font-medium text-text-tertiary uppercase tracking-wide mb-1">
+      <span>{text}</span>
+      {hint && (
+        <Tooltip label={t(`routineTooltips.${hint}`)}>
+          <span className="inline-flex items-center cursor-help text-text-tertiary/70 hover:text-text-secondary">
+            <Info size={10} />
+          </span>
+        </Tooltip>
+      )}
     </label>
   );
 }
@@ -40,7 +50,7 @@ function AskAiParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Prompt" />
+        <FieldLabel text="Prompt" hint="stepPrompt" />
         <textarea
           value={(params.prompt as string) ?? ''}
           onChange={(e) => onChange({ ...params, prompt: e.target.value })}
@@ -50,7 +60,7 @@ function AskAiParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="System Prompt (optional)" />
+        <FieldLabel text="System Prompt (optional)" hint="fieldSystemPrompt" />
         <textarea
           value={(params.system_prompt as string) ?? ''}
           onChange={(e) => onChange({ ...params, system_prompt: e.target.value })}
@@ -61,7 +71,7 @@ function AskAiParams({ params, onChange }: P) {
       </div>
       <div className="flex gap-3">
         <div className="flex-1">
-          <FieldLabel text="Temperature" />
+          <FieldLabel text="Temperature" hint="fieldTemperature" />
           <input
             type="number" min={0} max={2} step={0.1}
             value={(params.temperature as number) ?? 0.7}
@@ -70,7 +80,7 @@ function AskAiParams({ params, onChange }: P) {
           />
         </div>
         <div className="flex-1">
-          <FieldLabel text="Max Tokens" />
+          <FieldLabel text="Max Tokens" hint="fieldMaxTokens" />
           <input
             type="number" min={1}
             value={(params.max_tokens as number) ?? 2048}
@@ -87,7 +97,7 @@ function RunExpertParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Expert ID" />
+        <FieldLabel text="Expert ID" hint="fieldExpertId" />
         <input
           value={(params.expert_id as string) ?? ''}
           onChange={(e) => onChange({ ...params, expert_id: e.target.value })}
@@ -96,7 +106,7 @@ function RunExpertParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Task" />
+        <FieldLabel text="Task" hint="stepTask" />
         <textarea
           value={(params.task as string) ?? ''}
           onChange={(e) => onChange({ ...params, task: e.target.value })}
@@ -106,7 +116,7 @@ function RunExpertParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Context (optional)" />
+        <FieldLabel text="Context (optional)" hint="fieldContext" />
         <textarea
           value={(params.context as string) ?? ''}
           onChange={(e) => onChange({ ...params, context: e.target.value })}
@@ -116,7 +126,7 @@ function RunExpertParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Max Turns" />
+        <FieldLabel text="Max Turns" hint="fieldMaxTurns" />
         <input
           type="number" min={1}
           value={(params.max_turns as number) ?? 10}
@@ -148,7 +158,7 @@ function ClassifyParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Input" />
+        <FieldLabel text="Input" hint="fieldInput" />
         <textarea
           value={(params.prompt as string) ?? ''}
           onChange={(e) => onChange({ ...params, prompt: e.target.value })}
@@ -158,7 +168,7 @@ function ClassifyParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Categories" />
+        <FieldLabel text="Categories" hint="stepCategories" />
         <div className="space-y-2">
           {categories.map((cat, i) => (
             <div key={cat.id ?? i} className="flex gap-2 items-start">
@@ -216,7 +226,7 @@ function ExtractParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Input" />
+        <FieldLabel text="Input" hint="fieldInput" />
         <textarea
           value={(params.prompt as string) ?? ''}
           onChange={(e) => onChange({ ...params, prompt: e.target.value })}
@@ -226,7 +236,7 @@ function ExtractParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Schema" />
+        <FieldLabel text="Schema" hint="stepSchema" />
         <div className="space-y-2">
           {schema.map((field, i) => (
             <div key={field.id ?? i} className="flex gap-2 items-start">
@@ -281,7 +291,7 @@ function SummarizeParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Input Field" />
+        <FieldLabel text="Input Field" hint="fieldInputField" />
         <input
           value={(params.input_field as string) ?? ''}
           onChange={(e) => onChange({ ...params, input_field: e.target.value })}
@@ -290,7 +300,7 @@ function SummarizeParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Length" />
+        <FieldLabel text="Length" hint="fieldLength" />
         <select
           value={(params.max_length as string) ?? 'medium'}
           onChange={(e) => onChange({ ...params, max_length: e.target.value })}
@@ -302,7 +312,7 @@ function SummarizeParams({ params, onChange }: P) {
         </select>
       </div>
       <div>
-        <FieldLabel text="Focus (optional)" />
+        <FieldLabel text="Focus (optional)" hint="fieldFocus" />
         <input
           value={(params.focus as string) ?? ''}
           onChange={(e) => onChange({ ...params, focus: e.target.value })}
@@ -320,7 +330,7 @@ function SearchMemoryParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Query" />
+        <FieldLabel text="Query" hint="stepQuery" />
         <textarea
           value={(params.query as string) ?? ''}
           onChange={(e) => onChange({ ...params, query: e.target.value })}
@@ -330,7 +340,7 @@ function SearchMemoryParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Scope" />
+        <FieldLabel text="Scope" hint="fieldScope" />
         <select
           value={(params.scope as string) ?? 'global'}
           onChange={(e) => onChange({ ...params, scope: e.target.value })}
@@ -341,7 +351,7 @@ function SearchMemoryParams({ params, onChange }: P) {
         </select>
       </div>
       <div>
-        <FieldLabel text="Max Results" />
+        <FieldLabel text="Max Results" hint="fieldMaxResults" />
         <input
           type="number" min={1} max={20}
           value={(params.max_results as number) ?? 5}
@@ -357,7 +367,7 @@ function SearchWebParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Query" />
+        <FieldLabel text="Query" hint="stepQuery" />
         <textarea
           value={(params.query as string) ?? ''}
           onChange={(e) => onChange({ ...params, query: e.target.value })}
@@ -367,7 +377,7 @@ function SearchWebParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Max Results" />
+        <FieldLabel text="Max Results" hint="fieldMaxResults" />
         <input
           type="number" min={1} max={10}
           value={(params.max_results as number) ?? 5}
@@ -390,7 +400,7 @@ function SaveToMemoryParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Content" />
+        <FieldLabel text="Content" hint="fieldContent" />
         <textarea
           value={(params.content as string) ?? ''}
           onChange={(e) => onChange({ ...params, content: e.target.value })}
@@ -400,7 +410,7 @@ function SaveToMemoryParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Scope" />
+        <FieldLabel text="Scope" hint="fieldScope" />
         <select
           value={(params.scope as string) ?? 'global'}
           onChange={(e) => onChange({ ...params, scope: e.target.value })}
@@ -411,7 +421,7 @@ function SaveToMemoryParams({ params, onChange }: P) {
         </select>
       </div>
       <div>
-        <FieldLabel text="Type" />
+        <FieldLabel text="Type" hint="fieldMemoryType" />
         <select
           value={(params.type as string) ?? 'fact'}
           onChange={(e) => onChange({ ...params, type: e.target.value })}
@@ -448,7 +458,7 @@ function HttpRequestParams({ params, onChange }: P) {
     <div className="space-y-3">
       <div className="flex gap-2">
         <div className="w-24">
-          <FieldLabel text="Method" />
+          <FieldLabel text="Method" hint="fieldHttpMethod" />
           <select
             value={(params.method as string) ?? 'GET'}
             onChange={(e) => onChange({ ...params, method: e.target.value })}
@@ -462,7 +472,7 @@ function HttpRequestParams({ params, onChange }: P) {
           </select>
         </div>
         <div className="flex-1">
-          <FieldLabel text="URL" />
+          <FieldLabel text="URL" hint="fieldHttpUrl" />
           <input
             value={(params.url as string) ?? ''}
             onChange={(e) => onChange({ ...params, url: e.target.value })}
@@ -473,7 +483,7 @@ function HttpRequestParams({ params, onChange }: P) {
       </div>
 
       <div>
-        <FieldLabel text="Headers" />
+        <FieldLabel text="Headers" hint="fieldHttpHeaders" />
         <div className="space-y-1.5">
           {headers.map((h, i) => (
             <div key={i} className="flex gap-1.5 items-center">
@@ -507,7 +517,7 @@ function HttpRequestParams({ params, onChange }: P) {
       </div>
 
       <div>
-        <FieldLabel text="Body (JSON)" />
+        <FieldLabel text="Body (JSON)" hint="fieldHttpBody" />
         <textarea
           value={(params.body as string) ?? ''}
           onChange={(e) => onChange({ ...params, body: e.target.value })}
@@ -518,7 +528,7 @@ function HttpRequestParams({ params, onChange }: P) {
       </div>
 
       <div>
-        <FieldLabel text="Authentication" />
+        <FieldLabel text="Authentication" hint="fieldAuth" />
         <select
           value={(params.auth_type as string) ?? 'none'}
           onChange={(e) => onChange({ ...params, auth_type: e.target.value })}
@@ -532,7 +542,7 @@ function HttpRequestParams({ params, onChange }: P) {
       </div>
 
       <div>
-        <FieldLabel text="Timeout (seconds)" />
+        <FieldLabel text="Timeout (seconds)" hint="fieldTimeoutSeconds" />
         <input
           type="number" min={1}
           value={(params.timeout as number) ?? 30}
@@ -548,7 +558,7 @@ function RunCommandParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Command" />
+        <FieldLabel text="Command" hint="stepCommand" />
         <input
           value={(params.command as string) ?? ''}
           onChange={(e) => onChange({ ...params, command: e.target.value })}
@@ -557,7 +567,7 @@ function RunCommandParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Arguments" />
+        <FieldLabel text="Arguments" hint="fieldArguments" />
         <textarea
           value={(params.args as string) ?? ''}
           onChange={(e) => onChange({ ...params, args: e.target.value })}
@@ -567,7 +577,7 @@ function RunCommandParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Working Directory" />
+        <FieldLabel text="Working Directory" hint="fieldWorkingDir" />
         <input
           value={(params.working_directory as string) ?? ''}
           onChange={(e) => onChange({ ...params, working_directory: e.target.value })}
@@ -576,7 +586,7 @@ function RunCommandParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Timeout (seconds)" />
+        <FieldLabel text="Timeout (seconds)" hint="fieldTimeoutSeconds" />
         <input
           type="number" min={1}
           value={(params.timeout as number) ?? 300}
@@ -592,7 +602,7 @@ function ClaudeCodeParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Mode" />
+        <FieldLabel text="Mode" hint="fieldClaudeMode" />
         <select
           value={(params.mode as string) ?? 'ask'}
           onChange={(e) => onChange({ ...params, mode: e.target.value })}
@@ -605,7 +615,7 @@ function ClaudeCodeParams({ params, onChange }: P) {
         </select>
       </div>
       <div>
-        <FieldLabel text="Prompt" />
+        <FieldLabel text="Prompt" hint="stepPrompt" />
         <textarea
           value={(params.prompt as string) ?? ''}
           onChange={(e) => onChange({ ...params, prompt: e.target.value })}
@@ -615,7 +625,7 @@ function ClaudeCodeParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Working Directory" />
+        <FieldLabel text="Working Directory" hint="fieldWorkingDir" />
         <input
           value={(params.working_directory as string) ?? ''}
           onChange={(e) => onChange({ ...params, working_directory: e.target.value })}
@@ -625,7 +635,7 @@ function ClaudeCodeParams({ params, onChange }: P) {
       </div>
       <div className="flex gap-3">
         <div className="flex-1">
-          <FieldLabel text="Max Turns" />
+          <FieldLabel text="Max Turns" hint="fieldMaxTurns" />
           <input
             type="number" min={1}
             value={(params.max_turns as number) ?? 50}
@@ -634,7 +644,7 @@ function ClaudeCodeParams({ params, onChange }: P) {
           />
         </div>
         <div className="flex-1">
-          <FieldLabel text="Timeout (s)" />
+          <FieldLabel text="Timeout (s)" hint="fieldTimeoutSeconds" />
           <input
             type="number" min={1}
             value={(params.timeout as number) ?? 600}
@@ -651,7 +661,7 @@ function WaitForWebhookParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Match Path" />
+        <FieldLabel text="Match Path" hint="fieldMatchPath" />
         <input
           value={(params.match_path as string) ?? ''}
           onChange={(e) => onChange({ ...params, match_path: e.target.value })}
@@ -660,7 +670,7 @@ function WaitForWebhookParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Timeout (seconds)" />
+        <FieldLabel text="Timeout (seconds)" hint="fieldTimeoutSeconds" />
         <input
           type="number" min={1}
           value={(params.timeout as number) ?? 3600}
@@ -669,7 +679,7 @@ function WaitForWebhookParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Description" />
+        <FieldLabel text="Description" hint="fieldDescription" />
         <textarea
           value={(params.description as string) ?? ''}
           onChange={(e) => onChange({ ...params, description: e.target.value })}
@@ -686,7 +696,7 @@ function RunScriptParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Language" />
+        <FieldLabel text="Language" hint="fieldLanguage" />
         <select
           value={(params.language as string) ?? 'python'}
           onChange={(e) => onChange({ ...params, language: e.target.value })}
@@ -697,7 +707,7 @@ function RunScriptParams({ params, onChange }: P) {
         </select>
       </div>
       <div>
-        <FieldLabel text="Code" />
+        <FieldLabel text="Code" hint="fieldCode" />
         <textarea
           value={(params.code as string) ?? ''}
           onChange={(e) => onChange({ ...params, code: e.target.value })}
@@ -711,7 +721,7 @@ function RunScriptParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Timeout (seconds)" />
+        <FieldLabel text="Timeout (seconds)" hint="fieldTimeoutSeconds" />
         <input
           type="number" min={1}
           value={(params.timeout as number) ?? 30}
@@ -729,7 +739,7 @@ function ConditionParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="If" />
+        <FieldLabel text="If" hint="fieldConditionField" />
         <input
           value={(params.field as string) ?? ''}
           onChange={(e) => onChange({ ...params, field: e.target.value })}
@@ -738,7 +748,7 @@ function ConditionParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Operator" />
+        <FieldLabel text="Operator" hint="fieldConditionOperator" />
         <select
           value={(params.operator as string) ?? 'equals'}
           onChange={(e) => onChange({ ...params, operator: e.target.value })}
@@ -755,7 +765,7 @@ function ConditionParams({ params, onChange }: P) {
         </select>
       </div>
       <div>
-        <FieldLabel text="Value" />
+        <FieldLabel text="Value" hint="fieldConditionValue" />
         <input
           value={(params.value as string) ?? ''}
           onChange={(e) => onChange({ ...params, value: e.target.value })}
@@ -771,7 +781,7 @@ function LoopParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Items Field" />
+        <FieldLabel text="Items Field" hint="stepItemsField" />
         <input
           value={(params.items_field as string) ?? ''}
           onChange={(e) => onChange({ ...params, items_field: e.target.value })}
@@ -780,7 +790,7 @@ function LoopParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Variable Name" />
+        <FieldLabel text="Variable Name" hint="fieldVariableName" />
         <input
           value={(params.variable_name as string) ?? 'item'}
           onChange={(e) => onChange({ ...params, variable_name: e.target.value })}
@@ -799,7 +809,7 @@ function DelayParams({ params, onChange }: P) {
   return (
     <div className="flex gap-3">
       <div className="flex-1">
-        <FieldLabel text="Duration" />
+        <FieldLabel text="Duration" hint="fieldDuration" />
         <input
           type="number" min={1}
           value={(params.duration as number) ?? 1}
@@ -808,7 +818,7 @@ function DelayParams({ params, onChange }: P) {
         />
       </div>
       <div className="flex-1">
-        <FieldLabel text="Unit" />
+        <FieldLabel text="Unit" hint="fieldDurationUnit" />
         <select
           value={(params.unit as string) ?? 'seconds'}
           onChange={(e) => onChange({ ...params, unit: e.target.value })}
@@ -827,7 +837,7 @@ function ApprovalGateParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Summary" />
+        <FieldLabel text="Summary" hint="fieldApprovalSummary" />
         <textarea
           value={(params.summary as string) ?? ''}
           onChange={(e) => onChange({ ...params, summary: e.target.value })}
@@ -852,7 +862,7 @@ function SendMessageParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Message" />
+        <FieldLabel text="Message" hint="stepMessage" />
         <textarea
           value={(params.message as string) ?? ''}
           onChange={(e) => onChange({ ...params, message: e.target.value })}
@@ -862,7 +872,7 @@ function SendMessageParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Target" />
+        <FieldLabel text="Target" hint="fieldNotifyTarget" />
         <select
           value={(params.target as string) ?? 'cerebro_chat'}
           onChange={(e) => onChange({ ...params, target: e.target.value })}
@@ -879,7 +889,7 @@ function NotificationParams({ params, onChange }: P) {
   return (
     <div className="space-y-3">
       <div>
-        <FieldLabel text="Title" />
+        <FieldLabel text="Title" hint="stepTitle" />
         <input
           value={(params.title as string) ?? ''}
           onChange={(e) => onChange({ ...params, title: e.target.value })}
@@ -888,7 +898,7 @@ function NotificationParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Body" />
+        <FieldLabel text="Body" hint="fieldNotifyBody" />
         <textarea
           value={(params.body as string) ?? ''}
           onChange={(e) => onChange({ ...params, body: e.target.value })}
@@ -898,7 +908,7 @@ function NotificationParams({ params, onChange }: P) {
         />
       </div>
       <div>
-        <FieldLabel text="Urgency" />
+        <FieldLabel text="Urgency" hint="fieldNotifyUrgency" />
         <select
           value={(params.urgency as string) ?? 'normal'}
           onChange={(e) => onChange({ ...params, urgency: e.target.value })}
@@ -971,6 +981,7 @@ interface StepConfigPanelProps {
 }
 
 export default function StepConfigPanel({ node, onUpdate, onClose }: StepConfigPanelProps) {
+  const { t } = useTranslation();
   const d = node.data as RoutineStepData;
   const resolved = resolveActionType(d.actionType);
   const meta = ACTION_META[resolved] ?? ACTION_META[d.actionType];
@@ -1011,13 +1022,15 @@ export default function StepConfigPanel({ node, onUpdate, onClose }: StepConfigP
         <h3 className="text-sm font-semibold text-text-primary tracking-wide">
           Step Configuration
         </h3>
-        <button
-          onClick={onClose}
-          aria-label="Close step configuration"
-          className="p-1 rounded-md text-text-tertiary hover:text-text-secondary hover:bg-bg-hover transition-colors"
-        >
-          <X size={16} />
-        </button>
+        <Tooltip label={t('routineTooltips.closePanel')} shortcut="Esc">
+          <button
+            onClick={onClose}
+            aria-label={t('routineTooltips.closePanel')}
+            className="p-1 rounded-md text-text-tertiary hover:text-text-secondary hover:bg-bg-hover transition-colors"
+          >
+            <X size={16} />
+          </button>
+        </Tooltip>
       </div>
 
       {/* Content */}
@@ -1026,7 +1039,7 @@ export default function StepConfigPanel({ node, onUpdate, onClose }: StepConfigP
         <Section label="STEP IDENTITY">
           <div className="space-y-3">
             <div>
-              <FieldLabel text="Name" />
+              <FieldLabel text="Name" hint="stepName" />
               <input
                 value={stepName}
                 onChange={(e) => setStepName(e.target.value)}
@@ -1036,7 +1049,7 @@ export default function StepConfigPanel({ node, onUpdate, onClose }: StepConfigP
               />
             </div>
             <div>
-              <FieldLabel text="Action Type" />
+              <FieldLabel text="Action Type" hint="fieldActionType" />
               <div className="flex items-center gap-2">
                 {meta && (
                   <div
@@ -1064,7 +1077,7 @@ export default function StepConfigPanel({ node, onUpdate, onClose }: StepConfigP
           <Section label="ERROR HANDLING">
             <div className="space-y-3">
               <div>
-                <FieldLabel text="On Error" />
+                <FieldLabel text="On Error" hint="stepOnError" />
                 <select
                   value={d.onError}
                   onChange={(e) =>
@@ -1080,7 +1093,7 @@ export default function StepConfigPanel({ node, onUpdate, onClose }: StepConfigP
 
               {d.onError === 'retry' && (
                 <div>
-                  <FieldLabel text="Max Retries" />
+                  <FieldLabel text="Max Retries" hint="fieldMaxRetries" />
                   <input
                     type="number" min={1} max={10}
                     value={d.maxRetries ?? 1}
@@ -1091,7 +1104,7 @@ export default function StepConfigPanel({ node, onUpdate, onClose }: StepConfigP
               )}
 
               <div>
-                <FieldLabel text="Timeout (ms)" />
+                <FieldLabel text="Timeout (ms)" hint="fieldTimeoutMs" />
                 <input
                   type="number" min={1000} step={1000}
                   value={d.timeoutMs ?? ''}
@@ -1111,18 +1124,20 @@ export default function StepConfigPanel({ node, onUpdate, onClose }: StepConfigP
         {/* Approval (hidden for approval gates — always on) */}
         {resolved !== 'approval_gate' && (
           <Section label="APPROVAL">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Shield size={13} className="text-amber-400" />
-                <span className="text-xs text-text-secondary">
-                  Require approval before execution
-                </span>
+            <Tooltip label={t('routineTooltips.stepRequiresApproval')} side="left">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield size={13} className="text-amber-400" />
+                  <span className="text-xs text-text-secondary">
+                    Require approval before execution
+                  </span>
+                </div>
+                <Toggle
+                  checked={d.requiresApproval}
+                  onChange={() => onUpdate(node.id, { requiresApproval: !d.requiresApproval })}
+                />
               </div>
-              <Toggle
-                checked={d.requiresApproval}
-                onChange={() => onUpdate(node.id, { requiresApproval: !d.requiresApproval })}
-              />
-            </div>
+            </Tooltip>
           </Section>
         )}
 

@@ -1,10 +1,11 @@
-import { X, Zap } from 'lucide-react';
+import { X, Zap, Info } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { Node } from '@xyflow/react';
 import SchedulePicker from '../../ui/SchedulePicker';
 import type { DayOfWeek } from '../../../utils/cron-helpers';
 import { cronToSchedule, scheduleToCron, WEEKDAYS } from '../../../utils/cron-helpers';
-
-const TEAL = '#14b8a6';
+import { TRIGGER_TEAL as TEAL } from '../../../utils/step-defaults';
+import Tooltip from '../../ui/Tooltip';
 
 interface TriggerConfigPanelProps {
   node: Node;
@@ -13,6 +14,7 @@ interface TriggerConfigPanelProps {
 }
 
 export default function TriggerConfigPanel({ node, onUpdate, onClose }: TriggerConfigPanelProps) {
+  const { t } = useTranslation();
   const data = node.data as { triggerType: string; config: Record<string, unknown> };
   const triggerType = data.triggerType;
   const config = data.config ?? {};
@@ -44,12 +46,15 @@ export default function TriggerConfigPanel({ node, onUpdate, onClose }: TriggerC
         <span className="text-sm font-semibold text-text-primary flex-1">
           Trigger Configuration
         </span>
-        <button
-          onClick={onClose}
-          className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-bg-hover transition-colors"
-        >
-          <X size={14} />
-        </button>
+        <Tooltip label={t('routineTooltips.closePanel')} shortcut="Esc">
+          <button
+            onClick={onClose}
+            aria-label={t('routineTooltips.closePanel')}
+            className="p-1 rounded text-text-tertiary hover:text-text-secondary hover:bg-bg-hover transition-colors"
+          >
+            <X size={14} />
+          </button>
+        </Tooltip>
       </div>
 
       <div className="p-4 space-y-5">
@@ -66,8 +71,11 @@ export default function TriggerConfigPanel({ node, onUpdate, onClose }: TriggerC
         {/* Schedule config */}
         {triggerType === 'trigger_schedule' && schedule && (
           <div>
-            <label className="block text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">
+            <label className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-2">
               Schedule
+              <Tooltip label={t('routineTooltips.triggerCronHint')}>
+                <span className="cursor-help"><Info size={10} /></span>
+              </Tooltip>
             </label>
             <SchedulePicker
               selectedDays={schedule.days}
@@ -97,8 +105,11 @@ export default function TriggerConfigPanel({ node, onUpdate, onClose }: TriggerC
         {triggerType === 'trigger_webhook' && (
           <>
             <div>
-              <label className="block text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1.5">
+              <label className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1.5">
                 Path
+                <Tooltip label={t('routineTooltips.triggerWebhookUrl')}>
+                  <span className="cursor-help"><Info size={10} /></span>
+                </Tooltip>
               </label>
               <input
                 type="text"
@@ -109,8 +120,11 @@ export default function TriggerConfigPanel({ node, onUpdate, onClose }: TriggerC
               />
             </div>
             <div>
-              <label className="block text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1.5">
+              <label className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-text-tertiary mb-1.5">
                 Secret (optional)
+                <Tooltip label={t('routineTooltips.triggerWebhookSecret')}>
+                  <span className="cursor-help"><Info size={10} /></span>
+                </Tooltip>
               </label>
               <input
                 type="password"

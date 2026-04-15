@@ -1,7 +1,9 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { type NodeProps } from '@xyflow/react';
 import { StickyNote } from 'lucide-react';
 import clsx from 'clsx';
+import Tooltip from '../../ui/Tooltip';
 
 interface StickyNoteData {
   text: string;
@@ -10,6 +12,7 @@ interface StickyNoteData {
 }
 
 function StickyNoteNodeComponent({ data, selected, id }: NodeProps) {
+  const { t } = useTranslation();
   const d = data as StickyNoteData;
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(d.text ?? '');
@@ -34,7 +37,7 @@ function StickyNoteNodeComponent({ data, selected, id }: NodeProps) {
     window.dispatchEvent(event);
   }, [id, text]);
 
-  return (
+  const wrapper = (
     <div
       className={clsx(
         'rounded-md border transition-all duration-150 cursor-default',
@@ -83,6 +86,12 @@ function StickyNoteNodeComponent({ data, selected, id }: NodeProps) {
         )}
       </div>
     </div>
+  );
+
+  return (
+    <Tooltip label={t('routineTooltips.stickyNote')} side="top" delay={500} disabled={isEditing}>
+      {wrapper}
+    </Tooltip>
   );
 }
 
