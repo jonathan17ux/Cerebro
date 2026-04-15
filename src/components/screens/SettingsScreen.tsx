@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { Brain, Palette, Info, Shield, type LucideIcon } from 'lucide-react';
+import { Brain, Palette, Info, Shield, FlaskConical, type LucideIcon } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import MemorySection from './settings/MemorySection';
 import AppearanceSection from './settings/AppearanceSection';
 import SandboxSection from './settings/SandboxSection';
+import BetaFeaturesSection from './settings/BetaFeaturesSection';
 import { consumePendingSettingsSection } from './settings/pending-section';
 
-type Section = 'memory' | 'sandbox' | 'appearance' | 'about';
+type Section = 'memory' | 'sandbox' | 'appearance' | 'beta' | 'about';
 
 interface SectionNavItem {
   id: Section;
@@ -18,6 +19,7 @@ const SECTIONS: SectionNavItem[] = [
   { id: 'memory', icon: Brain },
   { id: 'sandbox', icon: Shield },
   { id: 'appearance', icon: Palette },
+  { id: 'beta', icon: FlaskConical },
   { id: 'about', icon: Info },
 ];
 
@@ -81,6 +83,7 @@ export default function SettingsScreen() {
           {activeSection === 'memory' && <MemorySection />}
           {activeSection === 'sandbox' && <SandboxSection />}
           {activeSection === 'appearance' && <AppearanceSection />}
+          {activeSection === 'beta' && <BetaFeaturesSection />}
           {activeSection === 'about' && (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <Info size={32} className="text-text-tertiary mb-3" />

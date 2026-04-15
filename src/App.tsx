@@ -10,6 +10,7 @@ import { TaskProvider } from './context/TaskContext';
 import { ToastProvider } from './context/ToastContext';
 import { VoiceProvider } from './context/VoiceContext';
 import { SandboxProvider } from './context/SandboxContext';
+import { FeatureFlagsProvider } from './context/FeatureFlagsContext';
 import AppLayout from './components/layout/AppLayout';
 import ToastContainer from './components/ui/Toast';
 
@@ -18,23 +19,25 @@ function App() {
     <ToastProvider>
       <ProviderProvider>
         <SandboxProvider>
-          <MemoryProvider>
-            <ExpertProvider>
-              <SkillProvider>
-              <RoutineProvider>
-                <ApprovalProvider>
-                  <TaskProvider>
-                    <ChatProvider>
-                      <VoiceProvider>
-                        <AppLayout />
-                      </VoiceProvider>
-                    </ChatProvider>
-                  </TaskProvider>
-                </ApprovalProvider>
-              </RoutineProvider>
-              </SkillProvider>
-            </ExpertProvider>
-          </MemoryProvider>
+          <FeatureFlagsProvider>
+            <MemoryProvider>
+              <ExpertProvider>
+                <SkillProvider>
+                <RoutineProvider>
+                  <ApprovalProvider>
+                    <TaskProvider>
+                      <ChatProvider>
+                        <VoiceProvider>
+                          <AppLayout />
+                        </VoiceProvider>
+                      </ChatProvider>
+                    </TaskProvider>
+                  </ApprovalProvider>
+                </RoutineProvider>
+                </SkillProvider>
+              </ExpertProvider>
+            </MemoryProvider>
+          </FeatureFlagsProvider>
         </SandboxProvider>
       </ProviderProvider>
       <ToastContainer />

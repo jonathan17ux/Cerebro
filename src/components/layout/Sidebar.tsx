@@ -20,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 import { useChat } from '../../context/ChatContext';
 import { useApprovals } from '../../context/ApprovalContext';
 import { useTasks } from '../../context/TaskContext';
+import { useFeatureFlags } from '../../context/FeatureFlagsContext';
 import type { Conversation, Screen } from '../../types/chat';
 
 /* ── Nav structure: grouped by function ───────────────────────── */
@@ -210,6 +211,7 @@ export default function Sidebar() {
   } = useChat();
   const { pendingCount } = useApprovals();
   const { runningCount } = useTasks();
+  const { flags } = useFeatureFlags();
 
   const [collapsed, setCollapsed] = useState(false);
   const [hoveredConvId, setHoveredConvId] = useState<string | null>(null);
@@ -220,12 +222,14 @@ export default function Sidebar() {
     items.map((item) => ({ ...item, label: t(NAV_LABEL_KEYS[item.id] ?? item.id) }));
 
   const navPrimary = useMemo<NavItem[]>(() =>
-    resolveLabels(NAV_PRIMARY).map((item) =>
-      item.id === 'tasks' && runningCount > 0
-        ? { ...item, badge: runningCount }
-        : item,
-    ),
-    [runningCount, t],
+    resolveLabels(NAV_PRIMARY)
+      .filter((item) => item.id !== 'tasks' || flags.tasks)
+      .map((item) =>
+        item.id === 'tasks' && runningCount > 0
+          ? { ...item, badge: runningCount }
+          : item,
+      ),
+    [runningCount, t, flags.tasks],
   );
 
   const navOversight = useMemo<NavItem[]>(() =>

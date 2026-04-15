@@ -637,8 +637,24 @@ const en = {
     memory: 'Memory',
     sandbox: 'Sandbox',
     appearance: 'Appearance',
+    beta: 'Beta Features',
     about: 'About',
     aboutComingSoon: 'About Cerebro coming soon',
+  },
+
+  // ── Beta features section ──────────────────────────────────
+  betaFeatures: {
+    title: 'Beta Features',
+    description:
+      'Try features still under active development. Off by default \u2014 turn them on here if you want to help us iterate.',
+    warningTitle: 'Beta features may have bugs',
+    warningBody:
+      "These features aren't fully polished yet. Expect rough edges. Share feedback or report issues using the links below \u2014 it helps us ship them properly.",
+    discordLink: 'Join our Discord',
+    githubLink: 'Report an issue on GitHub',
+    tasksLabel: 'Tasks',
+    tasksDesc:
+      'Give Cerebro a goal and let it plan, execute, and deliver the result as a standalone task with its own workspace.',
   },
 
   // ── Appearance section ──────────────────────────────────────

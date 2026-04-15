@@ -639,8 +639,24 @@ const es: TranslationKeys = {
     memory: 'Memoria',
     sandbox: 'Sandbox',
     appearance: 'Apariencia',
+    beta: 'Funciones beta',
     about: 'Acerca de',
     aboutComingSoon: 'Acerca de Cerebro pr\u00f3ximamente',
+  },
+
+  // ── Secci\u00f3n de funciones beta ─────────────────────────────
+  betaFeatures: {
+    title: 'Funciones beta',
+    description:
+      'Prueba funciones que a\u00fan est\u00e1n en desarrollo activo. Desactivadas por defecto \u2014 act\u00edvalas aqu\u00ed si quieres ayudarnos a iterar.',
+    warningTitle: 'Las funciones beta pueden tener errores',
+    warningBody:
+      'Estas funciones a\u00fan no est\u00e1n pulidas. Es posible que encuentres detalles por resolver. Comparte comentarios o reporta problemas con los enlaces de abajo \u2014 nos ayuda a lanzarlas correctamente.',
+    discordLink: '\u00danete a nuestro Discord',
+    githubLink: 'Reportar un problema en GitHub',
+    tasksLabel: 'Tareas',
+    tasksDesc:
+      'Dale a Cerebro un objetivo y deja que planifique, ejecute y entregue el resultado como una tarea independiente con su propio espacio de trabajo.',
   },
 
   // ── Secci\u00f3n de apariencia ───────────────────────────────────

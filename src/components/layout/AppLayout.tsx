@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useChat } from '../../context/ChatContext';
+import { useFeatureFlags } from '../../context/FeatureFlagsContext';
 import Sidebar from './Sidebar';
 import ChatView from '../chat/ChatView';
 import WelcomeView from '../chat/WelcomeView';
@@ -28,6 +30,13 @@ export default function AppLayout() {
     dismissChatError,
     setActiveScreen,
   } = useChat();
+  const { flags, isLoading: flagsLoading } = useFeatureFlags();
+
+  useEffect(() => {
+    if (!flagsLoading && activeScreen === 'tasks' && !flags.tasks) {
+      setActiveScreen('chat');
+    }
+  }, [flagsLoading, activeScreen, flags.tasks, setActiveScreen]);
 
   const renderContent = () => {
     if (activeScreen === 'chat') {
