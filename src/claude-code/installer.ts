@@ -235,24 +235,13 @@ You have access to Cerebro-specific skills (look under \`${skillsDir}/\`):
 
 ### Task vs Routine vs Expert — choose the right one
 
-These three concepts are easy to confuse. Pick the one that matches what the user actually wants:
+- **Task** = one-shot work with a finished artifact ("build / draft / research X"). Use \`create-task\`.
+- **Routine** = same steps repeating on a schedule or trigger ("every morning…", "on every push…"). Managed in the Routines screen — never \`create-task\`.
+- **Expert** = a persistent persona the user returns to ("I need a fitness coach"). Use \`create-expert\`.
+- A task may delegate phases to experts; that does NOT make it an expert.
+- A plain question or chat → answer directly or delegate to an existing expert via the \`Agent\` tool.
 
-| User intent | What it is | What to do |
-|---|---|---|
-| "Build / draft / research / plan / produce **X** for me." Done **once**, with a finished artifact at the end. | **Task** — autonomous, single-shot work that ends in a deliverable. | Confirm title + goal in one sentence, then invoke \`create-task\`. |
-| "Every morning / every Sunday / on every push / when X happens, do Y." Same steps run **repeatedly** on a schedule or trigger. | **Routine** — a repeatable workflow. | Talk through the steps and the trigger with the user. (Routines are managed in the Routines screen — do NOT use \`create-task\` for these.) |
-| "I need a coach / tutor / advisor / specialist to help me with X over time." A **persona** the user will return to in many future conversations. | **Expert** — a persistent specialist subagent. | Propose a name, description, and system prompt, then invoke \`create-expert\`. |
-| Single question, chat, or info request. | None of the above. | Answer directly, or delegate to an existing expert via the \`Agent\` tool. |
-
-Decision rules of thumb:
-
-- **Has a finished artifact and ends → Task.** ("Write me a buying guide.")
-- **Recurs on a schedule or trigger → Routine.** ("Every morning, summarize my unread emails.")
-- **A who, not a what → Expert.** ("I want a fitness coach.")
-- A task can use experts (the task runner can delegate phases to them) — that does NOT make it an expert. If the user wants the work *done*, it is a task.
-- A routine is not a task. If you find yourself reaching for \`create-task\` for something that recurs, stop and discuss it as a routine instead.
-
-When the request is ambiguous, ask one short clarifying question (e.g. "Do you want me to do this once now, or set it up to run every week?") before invoking any skill.
+If ambiguous, ask one short clarifier (e.g. "Do you want me to do this once now, or set it up to run every week?") before invoking any skill.
 
 ## Task Mode
 
@@ -708,27 +697,7 @@ If the output says **ERROR**, report the error to the user.
 
 This skill creates a new **task** — a one-off, goal-oriented unit of autonomous work that produces a concrete deliverable (a markdown artifact, a runnable code app, or both). Tasks run themselves: clarify → plan → execute → deliverable.
 
-## Use this skill when
-
-The user is asking for a discrete piece of work to be **done once**, with a finished artifact at the end. Cues:
-
-- Verbs like *build, draft, write, design, research, produce, plan, prototype, generate, refactor, port, migrate, set up*.
-- The user describes a goal with a clear endpoint (a doc, an app, a brief, a plan, a report).
-- It is naturally a single-shot unit of work, not something that recurs.
-
-Examples that ARE tasks:
-- "Build me a habit tracker mini-app."
-- "Research the top 5 espresso machines under $500 and write a buying guide."
-- "Draft a 2-week training plan for my upcoming 10K."
-- "Refactor my project's auth module."
-
-## Do NOT use this skill when
-
-- The user wants a **recurring workflow** (every morning, every Sunday, on every push, on a schedule, when X happens, etc.) → that is a **routine**, not a task. Discuss the steps and the schedule with the user first.
-- The user wants a **persistent persona** they will talk to again and again (a coach, a tutor, an advisor, a specialist subagent) → that is an **expert**. Use the \`create-expert\` skill.
-- The user is asking a question, chatting, or wants information directly — just answer or delegate to an existing expert.
-
-If you are unsure whether the user wants a task vs a routine vs an expert, ask one short clarifying question before invoking any skill.
+You should only be here after deciding the user wants a **one-shot, deliverable-producing piece of work** (not a recurring routine, not a new expert persona). If you have not made that call yet, stop and re-read the Task vs Routine vs Expert guidance in your main system prompt.
 
 ## How to invoke
 
