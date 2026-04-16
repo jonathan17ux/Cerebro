@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import RunRecord, Task, TaskChecklistItem, TaskComment
+from models import Expert, RunRecord, Task, TaskChecklistItem, TaskComment
 from sandbox.validation import cerebro_data_dir, validate_link_path
 
 from .schemas import (
@@ -14,6 +14,7 @@ from .schemas import (
     ChecklistItemRead,
     ChecklistItemUpdate,
     CommentCreate,
+    CommentQueueUpdate,
     CommentRead,
     TaskCreate,
     TaskMove,
@@ -215,8 +216,21 @@ def update_task(task_id: str, body: TaskUpdate, request: Request, db: Session = 
     if "tags" in updates:
         updates["tags"] = _serialize_tags(updates["tags"])
 
+    old_expert_id = task.expert_id
+    reassigned = "expert_id" in updates and updates["expert_id"] != old_expert_id
+
     for key, val in updates.items():
         setattr(task, key, val)
+
+    if reassigned:
+        new_expert_id = updates["expert_id"]
+        if new_expert_id:
+            new_expert = db.get(Expert, new_expert_id)
+            new_name = new_expert.name if new_expert else "another expert"
+        else:
+            new_name = "Unassigned"
+        _add_system_comment(db, task.id, f"Reassigned to {new_name}")
+
     db.commit()
     db.refresh(task)
     return _task_to_read(task, db)
@@ -353,13 +367,57 @@ def create_comment(task_id: str, body: CommentCreate, db: Session = Depends(get_
     if body.kind not in ("comment", "instruction"):
         raise HTTPException(400, f"Invalid comment kind: {body.kind}")
 
+    queue_status = body.queue_status
+    pending_expert_id = body.pending_expert_id
+    if queue_status is not None:
+        if queue_status != "pending":
+            raise HTTPException(400, f"Invalid queue_status on create: {queue_status}")
+        if body.kind != "instruction":
+            raise HTTPException(400, "Only instruction comments can be queued")
+        if task.column != "in_progress" or not task.run_id:
+            raise HTTPException(400, "Can only queue while a run is in progress")
+        existing = (
+            db.query(TaskComment)
+            .filter_by(task_id=task_id, queue_status="pending")
+            .first()
+        )
+        if existing:
+            raise HTTPException(409, "A queued instruction already exists for this task")
+        if pending_expert_id and not db.get(Expert, pending_expert_id):
+            raise HTTPException(400, f"Expert {pending_expert_id} not found")
+    else:
+        # Only allow queue fields paired with queue_status=pending.
+        pending_expert_id = None
+
     comment = TaskComment(
         task_id=task_id,
         kind=body.kind,
         author_kind="user",
         body_md=body.body_md,
+        queue_status=queue_status,
+        pending_expert_id=pending_expert_id,
     )
     db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return CommentRead.model_validate(comment)
+
+
+@router.patch("/{task_id}/comments/{comment_id}/queue-status", response_model=CommentRead)
+def update_comment_queue_status(
+    task_id: str,
+    comment_id: str,
+    body: CommentQueueUpdate,
+    db: Session = Depends(get_db),
+):
+    comment = db.get(TaskComment, comment_id)
+    if not comment or comment.task_id != task_id:
+        raise HTTPException(404, "Comment not found")
+    if comment.queue_status != "pending":
+        raise HTTPException(400, f"Comment is not pending (current: {comment.queue_status})")
+    if body.queue_status not in ("delivered", "discarded"):
+        raise HTTPException(400, f"Invalid target queue_status: {body.queue_status}")
+    comment.queue_status = body.queue_status
     db.commit()
     db.refresh(comment)
     return CommentRead.model_validate(comment)

@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useChat } from '../../context/ChatContext';
 import { useFeatureFlags } from '../../context/FeatureFlagsContext';
+import { useTasks } from '../../context/TaskContext';
+import { useExperts } from '../../context/ExpertContext';
 import Sidebar from './Sidebar';
 import ChatView from '../chat/ChatView';
 import WelcomeView from '../chat/WelcomeView';
@@ -32,6 +34,15 @@ export default function AppLayout() {
     setActiveScreen,
   } = useChat();
   const { flags, isLoading: flagsLoading } = useFeatureFlags();
+  const { pendingFailurePrompts, confirmFailurePrompt, dismissFailurePrompt } = useTasks();
+  const { experts } = useExperts();
+
+  // Show one failure prompt at a time (FIFO).
+  const activePrompt = pendingFailurePrompts[0] ?? null;
+  const targetExpertName = useMemo(() => {
+    if (!activePrompt?.targetExpertId) return null;
+    return experts.find((e) => e.id === activePrompt.targetExpertId)?.name ?? null;
+  }, [activePrompt, experts]);
 
   useEffect(() => {
     if (!flagsLoading && activeScreen === 'tasks' && !flags.tasks) {
@@ -114,6 +125,29 @@ export default function AppLayout() {
                 ]
               : undefined
           }
+        />
+      )}
+
+      {!chatError && activePrompt && (
+        <AlertModal
+          icon={<AlertTriangle size={18} className="text-accent" />}
+          title={t('tasks.queueFailedPromptTitle')}
+          message={t('tasks.queueFailedPromptMessage', {
+            reason: activePrompt.failureReason,
+            expert: targetExpertName ?? t('tasks.drawerExpert'),
+          })}
+          onClose={() => dismissFailurePrompt(activePrompt.taskId)}
+          actions={[
+            {
+              label: t('tasks.queueFailedDiscard'),
+              onClick: () => dismissFailurePrompt(activePrompt.taskId),
+            },
+            {
+              label: t('tasks.queueFailedSend', { expert: targetExpertName ?? t('tasks.drawerExpert') }),
+              primary: true,
+              onClick: () => confirmFailurePrompt(activePrompt.taskId),
+            },
+          ]}
         />
       )}
     </div>

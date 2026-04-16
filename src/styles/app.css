@@ -70,7 +70,8 @@ body {
 .app-drag-region button,
 .app-drag-region input,
 .app-drag-region a,
-.app-no-drag {
+.app-no-drag,
+.app-no-drag * {
   -webkit-app-region: no-drag;
 }
 

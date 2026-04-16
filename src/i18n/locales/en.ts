@@ -272,6 +272,21 @@ const en = {
     drawerArtifacts: 'Artifacts',
     drawerArtifactsEmpty: 'No artifacts yet',
     drawerArtifactsMore: '+{{count}} more',
+    // Mentions + Activity
+    mentionPlaceholder: 'Mention an expert\u2026',
+    mentionNoResults: 'No matching experts',
+    commentsLabel: 'Comments',
+    activityEmpty: 'No activity yet',
+    activityCommented: '{{actor}} commented',
+    activityInstructed: '{{actor}} sent an instruction',
+    autoAssignedFromMention: '(Auto-assigned from @mention)',
+    // Queued instructions (sent while a run is in progress)
+    queuedWaitingBadge: 'Waiting for current run',
+    queuedAlreadyPending: 'An instruction is already queued for this task.',
+    queueFailedPromptTitle: 'Queued instruction',
+    queueFailedPromptMessage: 'The previous run did not finish ({{reason}}). Still send the queued instruction to {{expert}}?',
+    queueFailedSend: 'Send to {{expert}}',
+    queueFailedDiscard: 'Discard',
   },
 
   // ── Workspaces screen ───────────────────────────────────────

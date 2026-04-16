@@ -6,6 +6,8 @@ import clsx from 'clsx';
 interface LivePreviewProps {
   taskId: string;
   runId: string | null;
+  /** Whether the task is actively running (in_progress with a live agent). */
+  isRunning?: boolean;
   /** External project folder (if the task has one). Used when probing for index.html. */
   projectPath?: string | null;
   className?: string;
@@ -22,7 +24,7 @@ type PreviewSource = 'static' | 'dev_server';
  *    (from <run_info> blocks or common localhost patterns).
  * 3. When a URL is detected, switch iframe src to the live dev server.
  */
-export default function LivePreview({ taskId, runId, projectPath, className }: LivePreviewProps) {
+export default function LivePreview({ taskId, runId, isRunning = false, projectPath, className }: LivePreviewProps) {
   const { t } = useTranslation();
 
   // Static iframe only works for the internal workspace protocol; external
@@ -56,12 +58,12 @@ export default function LivePreview({ taskId, runId, projectPath, className }: L
     };
     probe();
     // Re-probe periodically while the run is active
-    if (runId && source === 'static') {
+    if (isRunning && source === 'static') {
       const id = setInterval(probe, 3000);
       return () => { cancelled = true; clearInterval(id); };
     }
     return () => { cancelled = true; };
-  }, [taskId, runId, source, iframeKey, isExternalProject]);
+  }, [taskId, isRunning, source, isExternalProject]);
 
   // Buffer for accumulating agent text to scan for URLs / <run_info> blocks.
   const textBufferRef = useRef('');
@@ -130,12 +132,13 @@ export default function LivePreview({ taskId, runId, projectPath, className }: L
   }, [runId, detectUrlFromText]);
 
   // Auto-refresh the static preview periodically while a run is active
-  // (so users see files update as the agent writes them)
+  // (so users see files update as the agent writes them). Stops once the
+  // run finishes so completed tasks don't flicker.
   useEffect(() => {
-    if (!runId || source === 'dev_server') return;
+    if (!isRunning || source === 'dev_server') return;
     const id = setInterval(() => setIframeKey((k) => k + 1), 3000);
     return () => clearInterval(id);
-  }, [runId, source]);
+  }, [isRunning, source]);
 
   const handleRefresh = () => {
     if (source === 'static') {

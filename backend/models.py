@@ -342,4 +342,11 @@ class TaskComment(Base):
     triggered_run_id: Mapped[str | None] = mapped_column(
         String(32), ForeignKey("run_records.id", ondelete="SET NULL"), nullable=True
     )
+    # Queue state for follow-up instructions sent while another run is active.
+    # NULL = not queued; pending = waiting for current run to finish; delivered =
+    # drained into a run; discarded = user dismissed after the previous run failed.
+    queue_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    pending_expert_id: Mapped[str | None] = mapped_column(
+        String(32), ForeignKey("experts.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)

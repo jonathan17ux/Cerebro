@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useTasks, type TaskPriority } from '../../../context/TaskContext';
 import { useExperts } from '../../../context/ExpertContext';
+import { extractMentionIds } from '../../../lib/mentions';
 import ProjectFolderField from './ProjectFolderField';
+import MentionTextarea from './MentionTextarea';
 
 interface NewTaskDialogProps {
   open: boolean;
@@ -28,6 +30,7 @@ export default function NewTaskDialog({ open, onClose }: NewTaskDialogProps) {
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const autoAssignedRef = useRef(false);
 
   // Reset form and auto-focus on open
   useEffect(() => {
@@ -41,6 +44,7 @@ export default function NewTaskDialog({ open, onClose }: NewTaskDialogProps) {
       setProjectPath(null);
       setFormError(null);
       setIsSubmitting(false);
+      autoAssignedRef.current = false;
       setTimeout(() => titleRef.current?.focus(), 50);
     }
   }, [open]);
@@ -54,6 +58,22 @@ export default function NewTaskDialog({ open, onClose }: NewTaskDialogProps) {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [open, onClose]);
+
+  // Filter to non-team experts for assignment (also used for mention autocomplete)
+  const assignableExperts = useMemo(
+    () => experts.filter((e) => e.type === 'expert' && e.isEnabled),
+    [experts],
+  );
+
+  // Auto-assign the first @mentioned expert if the user hasn't picked one yet
+  useEffect(() => {
+    if (!open || expertId) return;
+    const ids = extractMentionIds(description, assignableExperts);
+    if (ids[0]) {
+      setExpertId(ids[0]);
+      autoAssignedRef.current = true;
+    }
+  }, [open, expertId, description, assignableExperts]);
 
   if (!open) return null;
 
@@ -82,9 +102,6 @@ export default function NewTaskDialog({ open, onClose }: NewTaskDialogProps) {
       setIsSubmitting(false);
     }
   };
-
-  // Filter to non-team experts for assignment
-  const assignableExperts = experts.filter((e) => e.type === 'expert' && e.isEnabled);
 
   return (
     <div
@@ -128,9 +145,10 @@ export default function NewTaskDialog({ open, onClose }: NewTaskDialogProps) {
               {t('tasks.descriptionLabel')}{' '}
               <span className="text-text-tertiary font-normal">{t('common.optional')}</span>
             </label>
-            <textarea
+            <MentionTextarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={setDescription}
+              experts={assignableExperts}
               placeholder={t('tasks.descriptionPlaceholder')}
               rows={3}
               className="w-full bg-bg-surface border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/40 transition-colors resize-none"
@@ -147,7 +165,10 @@ export default function NewTaskDialog({ open, onClose }: NewTaskDialogProps) {
               </label>
               <select
                 value={expertId}
-                onChange={(e) => setExpertId(e.target.value)}
+                onChange={(e) => {
+                  setExpertId(e.target.value);
+                  autoAssignedRef.current = false;
+                }}
                 className="w-full bg-bg-surface border border-border-subtle rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent/40 transition-colors appearance-none"
               >
                 <option value="">{t('tasks.expertNone')}</option>
@@ -157,6 +178,11 @@ export default function NewTaskDialog({ open, onClose }: NewTaskDialogProps) {
                   </option>
                 ))}
               </select>
+              {autoAssignedRef.current && expertId && (
+                <p className="mt-1 text-[10px] text-accent">
+                  {t('tasks.autoAssignedFromMention')}
+                </p>
+              )}
             </div>
 
             {/* Priority */}

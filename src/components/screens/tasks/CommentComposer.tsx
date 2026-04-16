@@ -1,32 +1,51 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Send, MessageSquare } from 'lucide-react';
 import clsx from 'clsx';
 import { useTasks } from '../../../context/TaskContext';
+import { useExperts } from '../../../context/ExpertContext';
+import MentionTextarea from './MentionTextarea';
+import { extractMentionIds } from '../../../lib/mentions';
 
 interface CommentComposerProps {
   taskId: string;
+  currentExpertId: string | null;
+  hasPendingQueuedInstruction: boolean;
   onCommentAdded: () => void;
 }
 
-export default function CommentComposer({ taskId, onCommentAdded }: CommentComposerProps) {
+export default function CommentComposer({
+  taskId,
+  currentExpertId,
+  hasPendingQueuedInstruction,
+  onCommentAdded,
+}: CommentComposerProps) {
   const { t } = useTranslation();
   const { addComment, sendInstruction } = useTasks();
+  const { experts } = useExperts();
+
+  const assignableExperts = useMemo(
+    () => experts.filter((e) => e.type === 'expert' && e.isEnabled),
+    [experts],
+  );
 
   const [text, setText] = useState('');
   const [isSending, setIsSending] = useState(false);
 
   const isEmpty = text.trim().length === 0;
+  const sendDisabled = isEmpty || isSending || hasPendingQueuedInstruction;
 
   const handleSubmit = useCallback(
     async (kind: 'comment' | 'instruction') => {
       const trimmed = text.trim();
       if (!trimmed || isSending) return;
+      if (kind === 'instruction' && hasPendingQueuedInstruction) return;
       setIsSending(true);
       try {
         if (kind === 'instruction') {
-          // Send to Expert: creates comment AND triggers a follow-up run
-          await sendInstruction(taskId, trimmed);
+          const mentionIds = extractMentionIds(trimmed, assignableExperts);
+          const targetExpertId = mentionIds[0] ?? currentExpertId;
+          await sendInstruction(taskId, trimmed, targetExpertId);
         } else {
           await addComment(taskId, kind, trimmed);
         }
@@ -38,14 +57,15 @@ export default function CommentComposer({ taskId, onCommentAdded }: CommentCompo
         setIsSending(false);
       }
     },
-    [taskId, text, isSending, addComment, sendInstruction, onCommentAdded],
+    [taskId, text, isSending, hasPendingQueuedInstruction, addComment, sendInstruction, onCommentAdded, assignableExperts, currentExpertId],
   );
 
   return (
     <div className="space-y-2">
-      <textarea
+      <MentionTextarea
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={setText}
+        experts={assignableExperts}
         placeholder={t('tasks.commentPlaceholder')}
         rows={3}
         className={clsx(
@@ -54,6 +74,11 @@ export default function CommentComposer({ taskId, onCommentAdded }: CommentCompo
           'border border-border-subtle focus:border-accent outline-none',
         )}
       />
+      {hasPendingQueuedInstruction && (
+        <p className="text-[11px] text-amber-400/80 italic">
+          {t('tasks.queuedAlreadyPending')}
+        </p>
+      )}
       <div className="flex items-center gap-2 justify-end">
         <button
           onClick={() => handleSubmit('comment')}
@@ -70,10 +95,11 @@ export default function CommentComposer({ taskId, onCommentAdded }: CommentCompo
         </button>
         <button
           onClick={() => handleSubmit('instruction')}
-          disabled={isEmpty || isSending}
+          disabled={sendDisabled}
+          title={hasPendingQueuedInstruction ? t('tasks.queuedAlreadyPending') : undefined}
           className={clsx(
             'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer',
-            isEmpty || isSending
+            sendDisabled
               ? 'bg-accent/20 text-accent/40 cursor-not-allowed'
               : 'bg-accent text-white hover:bg-accent/90',
           )}

@@ -273,6 +273,21 @@ const es: TranslationKeys = {
     drawerArtifacts: 'Archivos',
     drawerArtifactsEmpty: 'A\u00fan no hay archivos',
     drawerArtifactsMore: '+{{count}} m\u00e1s',
+    // Menciones + Actividad
+    mentionPlaceholder: 'Menciona un experto\u2026',
+    mentionNoResults: 'No hay expertos coincidentes',
+    commentsLabel: 'Comentarios',
+    activityEmpty: 'Sin actividad a\u00fan',
+    activityCommented: '{{actor}} coment\u00f3',
+    activityInstructed: '{{actor}} envi\u00f3 una instrucci\u00f3n',
+    autoAssignedFromMention: '(Asignado autom\u00e1ticamente por @menci\u00f3n)',
+    // Instrucciones en cola (enviadas mientras una ejecuci\u00f3n est\u00e1 en curso)
+    queuedWaitingBadge: 'Esperando la ejecuci\u00f3n actual',
+    queuedAlreadyPending: 'Ya hay una instrucci\u00f3n en cola para esta tarea.',
+    queueFailedPromptTitle: 'Instrucci\u00f3n en cola',
+    queueFailedPromptMessage: 'La ejecuci\u00f3n anterior no termin\u00f3 ({{reason}}). \u00bfEnviar igualmente la instrucci\u00f3n en cola a {{expert}}?',
+    queueFailedSend: 'Enviar a {{expert}}',
+    queueFailedDiscard: 'Descartar',
   },
 
   // ── Pantalla de workspaces ──────────────────────────────────

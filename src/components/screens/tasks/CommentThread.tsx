@@ -1,12 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { User, Bot, Info } from 'lucide-react';
+import { User, Bot, Info, X, Clock } from 'lucide-react';
 import clsx from 'clsx';
+import ReactMarkdown from 'react-markdown';
 import { useTasks, type TaskComment } from '../../../context/TaskContext';
+import { useExperts } from '../../../context/ExpertContext';
+import { normalizeToTokens } from '../../../lib/mentions';
+import { mentionMarkdownComponents } from './MentionBadge';
 import CommentComposer from './CommentComposer';
 
 interface CommentThreadProps {
   taskId: string;
+  currentExpertId: string | null;
+  filterSystem?: boolean;
 }
 
 function formatTime(iso: string): string {
@@ -19,9 +25,14 @@ function formatTime(iso: string): string {
   });
 }
 
-export default function CommentThread({ taskId }: CommentThreadProps) {
+export default function CommentThread({
+  taskId,
+  currentExpertId,
+  filterSystem = true,
+}: CommentThreadProps) {
   const { t } = useTranslation();
-  const { loadComments } = useTasks();
+  const { loadComments, discardQueuedInstruction } = useTasks();
+  const { experts } = useExperts();
 
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,6 +51,21 @@ export default function CommentThread({ taskId }: CommentThreadProps) {
     refresh();
   }, [refresh]);
 
+  const visibleComments = useMemo(
+    () => (filterSystem ? comments.filter((c) => c.kind !== 'system') : comments),
+    [comments, filterSystem],
+  );
+
+  const hasPendingQueuedInstruction = useMemo(
+    () => comments.some((c) => c.queue_status === 'pending'),
+    [comments],
+  );
+
+  const handleDiscardQueued = useCallback(async (commentId: string) => {
+    await discardQueuedInstruction(taskId, commentId);
+    await refresh();
+  }, [taskId, discardQueuedInstruction, refresh]);
+
   if (isLoading && comments.length === 0) {
     return (
       <p className="text-xs text-text-tertiary text-center py-6">
@@ -50,13 +76,13 @@ export default function CommentThread({ taskId }: CommentThreadProps) {
 
   return (
     <div className="space-y-4">
-      {comments.length === 0 && !isLoading && (
+      {visibleComments.length === 0 && !isLoading && (
         <p className="text-xs text-text-tertiary text-center py-4">
           {t('tasks.drawerNoComments')}
         </p>
       )}
 
-      {comments.map((comment) => {
+      {visibleComments.map((comment) => {
         if (comment.kind === 'system') {
           return (
             <div key={comment.id} className="flex items-start gap-2 py-1">
@@ -71,6 +97,8 @@ export default function CommentThread({ taskId }: CommentThreadProps) {
 
         const isInstruction = comment.kind === 'instruction';
         const isUser = comment.author_kind === 'user';
+        const isPending = comment.queue_status === 'pending';
+        const normalized = normalizeToTokens(comment.body_md, experts);
 
         return (
           <div
@@ -91,21 +119,45 @@ export default function CommentThread({ taskId }: CommentThreadProps) {
               <span className="text-xs font-medium text-text-secondary">
                 {isUser ? t('tasks.drawerYou') : t('tasks.drawerExpert')}
               </span>
-              {isInstruction && (
+              {isInstruction && !isPending && (
                 <span className="text-[10px] font-medium text-accent bg-accent/10 px-1.5 py-0.5 rounded">
                   {t('tasks.sentToExpert')}
+                </span>
+              )}
+              {isPending && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-300 bg-amber-500/15 px-1.5 py-0.5 rounded">
+                  <Clock size={10} />
+                  {t('tasks.queuedWaitingBadge')}
                 </span>
               )}
               <span className="text-[10px] text-text-tertiary ml-auto">
                 {formatTime(comment.created_at)}
               </span>
+              {isPending && (
+                <button
+                  onClick={() => handleDiscardQueued(comment.id)}
+                  title={t('tasks.queueFailedDiscard')}
+                  className="p-0.5 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </div>
-            <p className="text-sm text-text-primary whitespace-pre-wrap">{comment.body_md}</p>
+            <div className="text-sm text-text-primary whitespace-pre-wrap prose prose-invert prose-sm max-w-none prose-p:my-0">
+              <ReactMarkdown components={mentionMarkdownComponents}>
+                {normalized}
+              </ReactMarkdown>
+            </div>
           </div>
         );
       })}
 
-      <CommentComposer taskId={taskId} onCommentAdded={refresh} />
+      <CommentComposer
+        taskId={taskId}
+        currentExpertId={currentExpertId}
+        hasPendingQueuedInstruction={hasPendingQueuedInstruction}
+        onCommentAdded={refresh}
+      />
     </div>
   );
 }

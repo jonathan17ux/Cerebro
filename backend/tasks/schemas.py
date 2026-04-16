@@ -86,6 +86,12 @@ class ChecklistItemRead(BaseModel):
 class CommentCreate(BaseModel):
     kind: str = "comment"
     body_md: str
+    queue_status: str | None = None
+    pending_expert_id: str | None = None
+
+
+class CommentQueueUpdate(BaseModel):
+    queue_status: str  # must be "delivered" or "discarded"
 
 
 class CommentRead(BaseModel):
@@ -96,6 +102,8 @@ class CommentRead(BaseModel):
     expert_id: str | None
     body_md: str
     triggered_run_id: str | None
+    queue_status: str | None = None
+    pending_expert_id: str | None = None
     created_at: datetime
 
     class Config:

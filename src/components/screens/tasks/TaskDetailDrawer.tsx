@@ -7,6 +7,7 @@ import { useExperts } from '../../../context/ExpertContext';
 import TaskDescriptionEditor from './TaskDescriptionEditor';
 import ChecklistEditor from './ChecklistEditor';
 import CommentThread from './CommentThread';
+import ActivityTimeline from './ActivityTimeline';
 import ExpertConsole from './ExpertConsole';
 import LivePreview from './LivePreview';
 import TagChipInput from './TagChipInput';
@@ -353,7 +354,9 @@ export default function TaskDetailDrawer({ task, onClose }: TaskDetailDrawerProp
     </>
   );
 
-  // Details content (description + checklist) — used in both modes
+  // Details content: description + checklist + Comments section (Trello-style).
+  // System comments live in the Activity tab; the comments section shows
+  // user/expert conversation only.
   const detailsContent = (
     <div className="p-5 space-y-5 overflow-y-auto">
       <TaskDescriptionEditor
@@ -362,30 +365,30 @@ export default function TaskDetailDrawer({ task, onClose }: TaskDetailDrawerProp
         onSave={handleDescriptionSave}
       />
       <ChecklistEditor task={task} />
+      <div className="pt-4 border-t border-border-subtle">
+        <span className="block text-xs font-medium text-text-secondary uppercase tracking-wide mb-3">
+          {t('tasks.commentsLabel')}
+        </span>
+        <CommentThread
+          taskId={task.id}
+          currentExpertId={task.expert_id}
+          filterSystem
+        />
+      </div>
     </div>
   );
 
-  // Activity content (comment thread + composer)
+  // Activity content: read-only chronological timeline of all events.
   const activityContent = (
     <div className="p-5 overflow-y-auto">
-      <CommentThread taskId={task.id} />
+      <ActivityTimeline taskId={task.id} />
     </div>
   );
 
-  // Focus-mode left panel combines details + activity
+  // Focus-mode left panel mirrors the compact Details content.
   const focusLeftPanel = (
     <div className="flex flex-col min-h-0 overflow-y-auto">
-      <div className="p-5 space-y-5">
-        <TaskDescriptionEditor
-          taskId={task.id}
-          value={task.description_md}
-          onSave={handleDescriptionSave}
-        />
-        <ChecklistEditor task={task} />
-        <div className="pt-4 border-t border-border-subtle">
-          <CommentThread taskId={task.id} />
-        </div>
-      </div>
+      {detailsContent}
     </div>
   );
 
@@ -395,7 +398,7 @@ export default function TaskDetailDrawer({ task, onClose }: TaskDetailDrawerProp
 
       <div
         className={clsx(
-          'fixed inset-y-0 right-0 z-40 flex flex-col',
+          'app-no-drag fixed inset-y-0 right-0 z-40 flex flex-col',
           'bg-bg-base border-l border-border-subtle shadow-2xl',
           'transition-[width] duration-200 ease-out',
           isFullWidth ? 'w-full' : 'w-[60%] min-w-[480px] max-w-[800px]',
@@ -423,7 +426,7 @@ export default function TaskDetailDrawer({ task, onClose }: TaskDetailDrawerProp
             </div>
             {/* Preview panel (30%) */}
             <div className="w-[30%] min-w-[320px] max-w-[520px] min-h-0">
-              <LivePreview taskId={task.id} runId={task.run_id} projectPath={task.project_path} />
+              <LivePreview taskId={task.id} runId={task.run_id} isRunning={isRunning} projectPath={task.project_path} />
             </div>
           </div>
         ) : (
@@ -459,7 +462,7 @@ export default function TaskDetailDrawer({ task, onClose }: TaskDetailDrawerProp
               )}
               {activeTab === 'preview' && (
                 <div className="flex-1 min-h-0">
-                  <LivePreview taskId={task.id} runId={task.run_id} projectPath={task.project_path} />
+                  <LivePreview taskId={task.id} runId={task.run_id} isRunning={isRunning} projectPath={task.project_path} />
                 </div>
               )}
               {activeTab === 'activity' && activityContent}

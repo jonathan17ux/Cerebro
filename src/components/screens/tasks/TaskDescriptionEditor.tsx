@@ -1,8 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pencil, Eye } from 'lucide-react';
 import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
+import { useExperts } from '../../../context/ExpertContext';
+import { normalizeToTokens } from '../../../lib/mentions';
+import { mentionMarkdownComponents } from './MentionBadge';
+import MentionTextarea from './MentionTextarea';
 
 interface TaskDescriptionEditorProps {
   taskId: string;
@@ -12,8 +16,14 @@ interface TaskDescriptionEditorProps {
 
 export default function TaskDescriptionEditor({ taskId, value, onSave }: TaskDescriptionEditorProps) {
   const { t } = useTranslation();
+  const { experts } = useExperts();
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(value);
+
+  const assignableExperts = useMemo(
+    () => experts.filter((e) => e.type === 'expert' && e.isEnabled),
+    [experts],
+  );
 
   const handleEdit = useCallback(() => {
     setDraft(value);
@@ -26,6 +36,11 @@ export default function TaskDescriptionEditor({ taskId, value, onSave }: TaskDes
       onSave(draft);
     }
   }, [draft, value, onSave]);
+
+  const previewBody = useMemo(
+    () => normalizeToTokens(value, experts),
+    [value, experts],
+  );
 
   return (
     <div>
@@ -43,12 +58,14 @@ export default function TaskDescriptionEditor({ taskId, value, onSave }: TaskDes
       </div>
 
       {isEditing ? (
-        <textarea
+        <MentionTextarea
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={handleBlur}
+          onChange={setDraft}
+          experts={assignableExperts}
           autoFocus
+          onBlur={handleBlur}
           placeholder={t('tasks.drawerDescriptionPlaceholder')}
+          rows={6}
           className={clsx(
             'w-full min-h-[120px] p-3 rounded-lg text-sm',
             'bg-bg-elevated text-text-primary placeholder:text-text-tertiary',
@@ -67,7 +84,9 @@ export default function TaskDescriptionEditor({ taskId, value, onSave }: TaskDes
         >
           {value ? (
             <div className="prose prose-invert prose-sm max-w-none">
-              <ReactMarkdown>{value}</ReactMarkdown>
+              <ReactMarkdown components={mentionMarkdownComponents}>
+                {previewBody}
+              </ReactMarkdown>
             </div>
           ) : (
             t('tasks.drawerDescriptionPlaceholder')

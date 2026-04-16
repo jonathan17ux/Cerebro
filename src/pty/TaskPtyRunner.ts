@@ -86,6 +86,7 @@ export class TaskPtyRunner extends EventEmitter {
 
     if (options.resume && options.sessionId) {
       args.push('--resume', toUuidFormat(options.sessionId));
+      args.push('--max-turns', String(options.maxTurns ?? 10));
     } else {
       args.push('--session-id', toUuidFormat(options.sessionId || options.runId));
       args.push('--agent', options.agentName);
@@ -107,6 +108,9 @@ export class TaskPtyRunner extends EventEmitter {
 
     // Prompt is a POSITIONAL argument (must be last) — this gives the full
     // interactive TUI. Using `-p` would put Claude Code in print mode instead.
+    // On --resume, Claude Code pastes the positional prompt into the input box
+    // but does NOT submit it, so the TUI sits idle. We instead inject the
+    // prompt via stdin + Enter once the TUI is ready (see onData below).
     if (!options.resume) {
       args.push(options.prompt);
     }
@@ -120,6 +124,10 @@ export class TaskPtyRunner extends EventEmitter {
     env.PWD = options.cwd;
 
     const wrapped = wrapClaudeSpawn({ claudeBinary: info.path, claudeArgs: args });
+
+    console.log(
+      `[TaskPtyRunner] spawn ${options.resume ? 'RESUME' : 'fresh'} session=${toUuidFormat(options.sessionId || options.runId)}`,
+    );
 
     this.ptyProcess = pty.spawn(wrapped.binary, wrapped.args, {
       name: 'xterm-256color',
@@ -135,6 +143,42 @@ export class TaskPtyRunner extends EventEmitter {
     let trustHandled = false;
     let strippedAccum = '';
 
+    // On --resume, Claude Code loads the TUI with the prior session but does
+    // NOT auto-submit the positional prompt. Instead, we wait for the TUI to
+    // render its input box, then paste the prompt + Enter via stdin. The
+    // "> " input indicator is reliable across Claude Code versions; once it
+    // appears we inject the prompt after a short settle delay.
+    let resumePromptInjected = !options.resume;
+    let resumeInjectScheduled = !options.resume;
+    let resumeStripped = '';
+
+    const injectResumePrompt = () => {
+      if (resumePromptInjected || !this.ptyProcess) return;
+      resumePromptInjected = true;
+      resumeStripped = '';
+      console.log('[TaskPtyRunner] injecting resume prompt via bracketed paste');
+      try {
+        const BRACKETED_PASTE_START = '\x1b[200~';
+        const BRACKETED_PASTE_END = '\x1b[201~';
+        this.ptyProcess.write(BRACKETED_PASTE_START + options.prompt + BRACKETED_PASTE_END);
+        setTimeout(() => {
+          try { this.ptyProcess?.write('\r'); } catch { /* noop */ }
+        }, 300);
+      } catch { /* noop */ }
+    };
+
+    // Safety net: if the TUI never shows the `> ` prompt indicator we detect
+    // (e.g., Claude Code re-renders it differently), force-inject after 8s
+    // so the run doesn't sit forever at an unseen ready state.
+    const resumeFallbackTimer = options.resume
+      ? setTimeout(() => {
+          if (!resumePromptInjected) {
+            console.log('[TaskPtyRunner] resume fallback timer fired — injecting anyway');
+            injectResumePrompt();
+          }
+        }, 8000)
+      : null;
+
     this.ptyProcess.onData((data: string) => {
       if (!trustHandled) {
         strippedAccum += stripAnsiAggressive(data);
@@ -144,6 +188,23 @@ export class TaskPtyRunner extends EventEmitter {
           setTimeout(() => { this.ptyProcess?.write('\r'); }, 300);
         }
       }
+
+      if (!resumePromptInjected && !resumeInjectScheduled) {
+        resumeStripped += stripAnsiAggressive(data);
+        // Cap the buffer — the indicator match only needs the tail and the
+        // stream can spew megabytes of history replay before the prompt shows.
+        if (resumeStripped.length > 4096) {
+          resumeStripped = resumeStripped.slice(-4096);
+        }
+        // Look for the input prompt indicator (`> ` at start of a line) that
+        // appears once the TUI is fully loaded and ready to accept input.
+        if (/(?:^|\n)\s*>\s/.test(resumeStripped)) {
+          resumeInjectScheduled = true;
+          // Wait a beat for the input box to settle, then inject.
+          setTimeout(injectResumePrompt, 1000);
+        }
+      }
+
       this.buffer += data;
 
       if (!this.flushTimer) {
@@ -156,6 +217,7 @@ export class TaskPtyRunner extends EventEmitter {
         clearInterval(this.flushTimer);
         this.flushTimer = null;
       }
+      if (resumeFallbackTimer) clearTimeout(resumeFallbackTimer);
       this.flushBuffer();
       this.emit('exit', exitCode, signal !== undefined ? String(signal) : undefined);
     });

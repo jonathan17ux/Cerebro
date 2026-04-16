@@ -7,6 +7,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
+import { stripMentionSyntax } from '../lib/mentions';
 
 export interface Task {
   id: string;
@@ -60,7 +61,17 @@ export interface TaskComment {
   expert_id: string | null;
   body_md: string;
   triggered_run_id: string | null;
+  queue_status: 'pending' | 'delivered' | 'discarded' | null;
+  pending_expert_id: string | null;
   created_at: string;
+}
+
+export interface FailurePrompt {
+  taskId: string;
+  taskTitle: string;
+  comment: TaskComment;
+  targetExpertId: string | null;
+  failureReason: string;
 }
 
 export interface TaskStats {
@@ -107,8 +118,21 @@ interface TaskContextValue {
   cancelTask: (id: string) => Promise<void>;
   /** Start the Expert working on a task — spawns Claude Code, moves card to In Progress. */
   startTask: (id: string) => Promise<void>;
-  /** Post an instruction comment AND trigger a follow-up Expert run in the same workspace. */
-  sendInstruction: (id: string, instruction: string) => Promise<void>;
+  /**
+   * Post an instruction comment. If the task is currently running, the
+   * instruction is queued (drained when the run ends). Otherwise it triggers
+   * a follow-up run immediately, reassigning first if targetExpertId differs
+   * from the task's current expert.
+   */
+  sendInstruction: (id: string, instruction: string, targetExpertId: string | null) => Promise<void>;
+  /** Flip a pending queued instruction to `discarded`; user cancels the handoff. */
+  discardQueuedInstruction: (taskId: string, commentId: string) => Promise<void>;
+  /** Pending failure prompts triggered when a run ended while an instruction was queued. */
+  pendingFailurePrompts: FailurePrompt[];
+  /** User confirmed the failure prompt — drain the queued instruction as a fresh run. */
+  confirmFailurePrompt: (taskId: string) => Promise<void>;
+  /** User dismissed the failure prompt — discard the queued instruction. */
+  dismissFailurePrompt: (taskId: string) => Promise<void>;
   loadComments: (taskId: string) => Promise<TaskComment[]>;
   addComment: (taskId: string, kind: string, bodyMd: string) => Promise<TaskComment>;
   addChecklistItem: (taskId: string, body: string) => Promise<ChecklistItem>;
@@ -129,14 +153,27 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     error: 0,
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [pendingFailurePrompts, setPendingFailurePrompts] = useState<FailurePrompt[]>([]);
 
   // Map of taskId -> unsubscribe function for agent event listeners.
   // Persists across renders so listeners aren't leaked on re-render.
   const runListeners = useRef<Map<string, () => void>>(new Map());
 
+  // Map of taskId -> internal Electron runId. On retries, task.run_id is pinned
+  // to the ORIGINAL Claude session, so we can't use it to cancel the live run.
+  const activeInternalRunIds = useRef<Map<string, string>>(new Map());
+
   // Monotonic counter so rapid drag-drops don't race: only the latest
   // moveTask call's loadTasks result is applied.
   const moveSeq = useRef(0);
+
+  // Forward ref to break the cycle:
+  //   registerRunListener → handleRunTerminated → drainQueuedInstruction → registerRunListener
+  // Listeners only need the *latest* version of handleRunTerminated; sync via useEffect.
+  const handleTermRef = useRef<
+    | ((taskId: string, runId: string, outcome: 'done' | 'error' | 'cancelled', error?: string) => Promise<void>)
+    | null
+  >(null);
 
   const loadTasks = useCallback(async () => {
     setIsLoading(true);
@@ -154,44 +191,6 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     loadTasks();
-  }, [loadTasks]);
-
-  // Orphan recovery: on mount, find any in_progress tasks whose runs are no longer
-  // active (e.g. app was killed mid-run) and transition them to error.
-  useEffect(() => {
-    let cancelled = false;
-    const recover = async () => {
-      try {
-        const [activeRuns, tasksNow] = await Promise.all([
-          window.cerebro.agent.activeRuns(),
-          window.cerebro.invoke({ method: 'GET', path: '/tasks' }),
-        ]);
-        if (cancelled || !tasksNow.ok) return;
-        const activeRunIds = new Set(activeRuns.map((r) => r.runId));
-        const list = tasksNow.data as Task[];
-        let recovered = 0;
-        for (const t of list) {
-          if (cancelled) return;
-          if (t.column === 'in_progress' && t.run_id && !activeRunIds.has(t.run_id)) {
-            await window.cerebro.invoke({
-              method: 'POST',
-              path: `/tasks/${t.id}/run-event`,
-              body: {
-                type: 'run_failed',
-                run_id: t.run_id,
-                error: 'Run was interrupted by app restart',
-              },
-            });
-            recovered++;
-          }
-        }
-        if (!cancelled && recovered > 0) await loadTasks();
-      } catch (err) {
-        console.warn('[task] Orphan recovery failed:', err);
-      }
-    };
-    recover();
-    return () => { cancelled = true; };
   }, [loadTasks]);
 
   // Clean up all event listeners on unmount
@@ -259,9 +258,11 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       unsub();
       runListeners.current.delete(id);
     }
+    const internalRunId = activeInternalRunIds.current.get(id) ?? task?.run_id;
+    activeInternalRunIds.current.delete(id);
     // Kill any active run
-    if (task?.run_id) {
-      try { await window.cerebro.agent.cancel(task.run_id); } catch { /* noop */ }
+    if (internalRunId) {
+      try { await window.cerebro.agent.cancel(internalRunId); } catch { /* noop */ }
     }
     const res = await window.cerebro.invoke({
       method: 'DELETE',
@@ -275,6 +276,9 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         ? window.cerebro.taskTerminal.removeBuffer(task.run_id).catch(() => { /* noop */ })
         : Promise.resolve(),
     ]);
+    // FK cascade drops the comments backend-side, but local prompt state
+    // must match — otherwise a modal would linger pointing at a dead task.
+    setPendingFailurePrompts((prev) => prev.filter((p) => p.taskId !== id));
     await loadTasks();
   }, [loadTasks, tasks]);
 
@@ -287,81 +291,56 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const cancelTask = useCallback(async (id: string) => {
-    // Find the task to get its run_id
     const task = tasks.find((t) => t.id === id);
-    // Kill the PTY if there's an active run
     if (task?.run_id) {
-      try {
-        await window.cerebro.agent.cancel(task.run_id);
-      } catch (err) {
-        console.warn('[task] Failed to cancel agent run:', err);
-      }
-      // Clean up event listener
+      // Tear down the listener BEFORE cancelling + routing through handleTermRef.
+      // Otherwise a late `done`/`error` event from the PTY can fire after cancel
+      // and double-post run_completed / double-drain the queued instruction.
       const unsub = runListeners.current.get(id);
       if (unsub) {
         unsub();
         runListeners.current.delete(id);
       }
-      // Fire run_cancelled event to transition card
+      // task.run_id may be an older session (on retries). Use the internal
+      // runId the runtime knows about to actually kill the PTY.
+      const internalRunId = activeInternalRunIds.current.get(id) ?? task.run_id;
+      activeInternalRunIds.current.delete(id);
       try {
-        await window.cerebro.invoke({
-          method: 'POST',
-          path: `/tasks/${id}/run-event`,
-          body: { type: 'run_cancelled', run_id: task.run_id },
-        });
+        await window.cerebro.agent.cancel(internalRunId);
       } catch (err) {
-        console.warn('[task] Failed to post run_cancelled:', err);
+        console.warn('[task] Failed to cancel agent run:', err);
       }
+      // Route through the ref so cancel = failure for the queue (prompt surfaces
+      // if an instruction was pending).
+      await handleTermRef.current?.(id, task.run_id, 'cancelled');
     } else {
-      // No active run — fall back to backend cancel endpoint
       const res = await window.cerebro.invoke({
         method: 'POST',
         path: `/tasks/${id}/cancel`,
       });
       if (!res.ok) throw new Error('Failed to cancel task');
+      await loadTasks();
     }
-    await loadTasks();
-  }, [loadTasks, tasks]);
+  }, [tasks, loadTasks]);
 
-  // Register an agent event listener that auto-transitions the card on done/error.
-  const registerRunListener = useCallback((taskId: string, runId: string) => {
+  const registerRunListener = useCallback((taskId: string, runId: string, reportedRunId?: string) => {
     // Clean up any prior listener for this task
     const prior = runListeners.current.get(taskId);
     if (prior) prior();
 
+    // reportedRunId is what the backend knows as task.run_id (the original
+    // Claude session on retries). Fall back to the internal runId for fresh runs.
+    const backendRunId = reportedRunId ?? runId;
+    activeInternalRunIds.current.set(taskId, runId);
     const unsub = window.cerebro.agent.onEvent(runId, async (event) => {
       if (event.type === 'done') {
-        try {
-          await window.cerebro.invoke({
-            method: 'POST',
-            path: `/tasks/${taskId}/run-event`,
-            body: { type: 'run_completed', run_id: runId },
-          });
-        } catch (err) {
-          console.warn('[task] Failed to post run_completed:', err);
-        }
-        const u = runListeners.current.get(taskId);
-        if (u) u();
-        runListeners.current.delete(taskId);
-        loadTasks();
+        await handleTermRef.current?.(taskId, backendRunId, 'done');
       } else if (event.type === 'error') {
-        try {
-          await window.cerebro.invoke({
-            method: 'POST',
-            path: `/tasks/${taskId}/run-event`,
-            body: { type: 'run_failed', run_id: runId, error: event.error },
-          });
-        } catch (err) {
-          console.warn('[task] Failed to post run_failed:', err);
-        }
-        const u = runListeners.current.get(taskId);
-        if (u) u();
-        runListeners.current.delete(taskId);
-        loadTasks();
+        await handleTermRef.current?.(taskId, backendRunId, 'error', event.error);
       }
     });
     runListeners.current.set(taskId, unsub);
-  }, [loadTasks]);
+  }, []);
 
   // Precedence: explicit task.project_path > hidden per-task workspace fallback.
   const resolveCwd = useCallback(async (task: Task): Promise<string> => {
@@ -388,7 +367,46 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     if (instructionComments.length > 0) {
       lines.push('', '## Previous instructions from the user');
       for (const c of instructionComments) {
-        lines.push(`- ${c.body_md.trim()}`);
+        lines.push(`- ${stripMentionSyntax(c.body_md.trim(), [])}`);
+      }
+    }
+    return lines.join('\n');
+  }, []);
+
+  // Build a comprehensive follow-up context so a (possibly newly-assigned)
+  // expert has the whole task history — description, checklist state, all
+  // prior comments including system events (like "Reassigned to QA").
+  const buildFullHistoryContext = useCallback((
+    task: Task,
+    allComments: TaskComment[],
+    excludeCommentId: string | null,
+  ): string => {
+    const lines: string[] = [];
+    lines.push(`Task title: ${task.title}`);
+    if (task.description_md?.trim()) {
+      lines.push('', '## Description', task.description_md.trim());
+    }
+    if (task.checklist.length > 0) {
+      lines.push('', '## Checklist');
+      for (const item of task.checklist) {
+        const mark = item.is_done ? '[x]' : '[ ]';
+        lines.push(`- ${mark} ${item.body}`);
+      }
+    }
+    const history = allComments.filter((c) => c.id !== excludeCommentId);
+    if (history.length > 0) {
+      lines.push('', '## History');
+      for (const c of history) {
+        const when = c.created_at;
+        const actor =
+          c.kind === 'system'
+            ? 'System'
+            : c.author_kind === 'user'
+              ? 'User'
+              : 'Expert';
+        const label = c.kind === 'instruction' ? `${actor} (instruction)` : actor;
+        const body = stripMentionSyntax(c.body_md.trim(), []);
+        lines.push(`- ${when} · ${label}: ${body}`);
       }
     }
     return lines.join('\n');
@@ -405,6 +423,10 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       ]);
       const instructions = allComments.filter((c) => c.kind === 'instruction');
       const prompt = buildDirectPrompt(task, instructions);
+      // Resume the prior Claude Code session on retry/rerun — preserves
+      // the agent's file state and conversation so it can pick up where it
+      // stopped (especially when a prior run exited without a deliverable).
+      const resumeSessionId = task.run_id || undefined;
 
       const runId = await window.cerebro.agent.run({
         conversationId: taskId,
@@ -414,15 +436,20 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         taskPhase: 'direct',
         workspacePath,
         maxTurns: 30,
+        resumeSessionId,
       });
 
+      // Pin task.run_id to the original Claude Code session on retries so
+      // subsequent retries keep resuming the same session. Internally, the
+      // Electron runId is still used for IPC/event routing and registerRunListener.
+      const reportedRunId = resumeSessionId ?? runId;
       await window.cerebro.invoke({
         method: 'POST',
         path: `/tasks/${taskId}/run-event`,
-        body: { type: 'run_started', run_id: runId },
+        body: { type: 'run_started', run_id: reportedRunId },
       });
 
-      registerRunListener(taskId, runId);
+      registerRunListener(taskId, runId, reportedRunId);
       await loadTasks();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -438,64 +465,334 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     }
   }, [tasks, loadComments, buildDirectPrompt, registerRunListener, loadTasks, resolveCwd]);
 
-  const sendInstruction = useCallback(async (taskId: string, instruction: string) => {
-    const task = tasks.find((t) => t.id === taskId);
-    if (!task) throw new Error(`Task ${taskId} not found`);
+  const spawnFollowUpRun = useCallback(async (
+    task: Task,
+    instruction: string,
+    excludeCommentId: string | null,
+  ): Promise<string> => {
+    const [allComments, workspacePath] = await Promise.all([
+      loadComments(task.id),
+      resolveCwd(task),
+    ]);
+    const followUpContext = buildFullHistoryContext(task, allComments, excludeCommentId);
+    const agentContent = stripMentionSyntax(instruction, []);
+    // Resume the prior Claude Code session on follow-up so the agent keeps
+    // its full context and file awareness from the prior deliverable.
+    const resumeSessionId = task.run_id || undefined;
 
-    // Create the instruction comment first (so the user sees it in the thread)
-    await window.cerebro.invoke({
-      method: 'POST',
-      path: `/tasks/${taskId}/comments`,
-      body: { kind: 'instruction', body_md: instruction },
-    });
-
-    // Load all comments to build follow-up context
-    const allComments = await loadComments(taskId);
-    const priorInstructions = allComments
-      .filter((c) => c.kind === 'instruction')
-      .slice(0, -1); // exclude the one we just added — it's the new instruction
-
-    // resolveCwd is idempotent — re-creates the hidden workspace if a prior
-    // cancel/abort cleared it, so instructions after a restart still work.
-    const workspacePath = await resolveCwd(task);
-
-    // Build follow-up context: original goal + prior instructions
-    const contextLines: string[] = [];
-    contextLines.push(`Original task: ${task.title}`);
-    if (task.description_md?.trim()) {
-      contextLines.push(task.description_md.trim());
-    }
-    if (priorInstructions.length > 0) {
-      contextLines.push('', 'Prior instructions:');
-      for (const c of priorInstructions) {
-        contextLines.push(`- ${c.body_md.trim()}`);
-      }
-    }
-    const followUpContext = contextLines.join('\n');
-
-    // Start a fresh Claude Code run rather than resuming the prior session.
-    // Sessions don't reliably survive across subprocess exits, but the workspace
-    // files are preserved on disk so the agent picks up where it left off.
     const runId = await window.cerebro.agent.run({
-      conversationId: taskId,
-      content: instruction,
+      conversationId: task.id,
+      content: agentContent,
       expertId: task.expert_id,
       runType: 'task',
       taskPhase: 'follow_up',
       workspacePath,
       followUpContext,
       maxTurns: 30,
+      resumeSessionId,
     });
 
+    const reportedRunId = resumeSessionId ?? runId;
     await window.cerebro.invoke({
       method: 'POST',
-      path: `/tasks/${taskId}/run-event`,
-      body: { type: 'run_started', run_id: runId },
+      path: `/tasks/${task.id}/run-event`,
+      body: { type: 'run_started', run_id: reportedRunId },
     });
 
-    registerRunListener(taskId, runId);
+    registerRunListener(task.id, runId, reportedRunId);
+    return runId;
+  }, [loadComments, resolveCwd, buildFullHistoryContext, registerRunListener]);
+
+  const pushFailurePrompt = useCallback((entry: FailurePrompt) => {
+    setPendingFailurePrompts((prev) => [
+      ...prev.filter((p) => p.taskId !== entry.taskId),
+      entry,
+    ]);
+  }, []);
+
+  const patchQueueStatus = useCallback(async (
+    taskId: string,
+    commentId: string,
+    status: 'delivered' | 'discarded',
+  ): Promise<boolean> => {
+    try {
+      const res = await window.cerebro.invoke({
+        method: 'PATCH',
+        path: `/tasks/${taskId}/comments/${commentId}/queue-status`,
+        body: { queue_status: status },
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn(`[task] Failed to set queue_status=${status}:`, err);
+      return false;
+    }
+  }, []);
+
+  const drainQueuedInstruction = useCallback(async (task: Task, comment: TaskComment) => {
+    const taskId = task.id;
+    const reassignTo = comment.pending_expert_id;
+    let workingTask: Task = task;
+
+    if (reassignTo && reassignTo !== task.expert_id) {
+      try {
+        await updateTask(taskId, { expert_id: reassignTo });
+        workingTask = { ...task, expert_id: reassignTo };
+      } catch (err) {
+        console.warn('[task] Failed to reassign during drain:', err);
+      }
+    }
+
+    try {
+      await spawnFollowUpRun(workingTask, comment.body_md, comment.id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await patchQueueStatus(taskId, comment.id, 'discarded');
+      pushFailurePrompt({
+        taskId,
+        taskTitle: workingTask.title,
+        comment,
+        targetExpertId: comment.pending_expert_id ?? workingTask.expert_id,
+        failureReason: `Failed to start queued run: ${message}`,
+      });
+      await loadTasks();
+      return;
+    }
+
+    await patchQueueStatus(taskId, comment.id, 'delivered');
     await loadTasks();
-  }, [tasks, loadComments, registerRunListener, loadTasks, resolveCwd]);
+  }, [updateTask, spawnFollowUpRun, pushFailurePrompt, patchQueueStatus, loadTasks]);
+
+  const discardQueuedInstruction = useCallback(async (taskId: string, commentId: string) => {
+    await patchQueueStatus(taskId, commentId, 'discarded');
+    // Scrub any failure prompt for this task so the modal doesn't linger.
+    setPendingFailurePrompts((prev) => prev.filter((p) => p.taskId !== taskId));
+    await loadTasks();
+  }, [patchQueueStatus, loadTasks]);
+
+  const handleRunTerminated = useCallback(async (
+    taskId: string,
+    runId: string,
+    outcome: 'done' | 'error' | 'cancelled',
+    error?: string,
+  ): Promise<void> => {
+    const eventType =
+      outcome === 'done' ? 'run_completed'
+        : outcome === 'error' ? 'run_failed'
+          : 'run_cancelled';
+    try {
+      await window.cerebro.invoke({
+        method: 'POST',
+        path: `/tasks/${taskId}/run-event`,
+        body: {
+          type: eventType,
+          run_id: runId,
+          ...(error ? { error } : {}),
+        },
+      });
+    } catch (err) {
+      console.warn(`[task] Failed to post ${eventType}:`, err);
+    }
+
+    // Tear down the listener (idempotent — registerRunListener clears prior).
+    const u = runListeners.current.get(taskId);
+    if (u) u();
+    runListeners.current.delete(taskId);
+    activeInternalRunIds.current.delete(taskId);
+
+    // Look for a pending queued instruction tied to this task.
+    let pending: TaskComment | null = null;
+    let freshTask: Task | null = null;
+    try {
+      const allComments = await loadComments(taskId);
+      pending = allComments.find((c) => c.queue_status === 'pending') ?? null;
+      if (pending) {
+        const taskRes = await window.cerebro.invoke({ method: 'GET', path: `/tasks/${taskId}` });
+        if (taskRes.ok) freshTask = taskRes.data as Task;
+      }
+    } catch (err) {
+      console.warn('[task] Failed to check queued instruction on termination:', err);
+    }
+
+    if (pending && freshTask) {
+      if (outcome === 'done') {
+        await drainQueuedInstruction(freshTask, pending);
+        return;
+      }
+      pushFailurePrompt({
+        taskId,
+        taskTitle: freshTask.title,
+        comment: pending,
+        targetExpertId: pending.pending_expert_id ?? freshTask.expert_id,
+        failureReason: error ?? (outcome === 'cancelled' ? 'Run was cancelled' : 'Run failed'),
+      });
+    }
+
+    await loadTasks();
+  }, [loadTasks, loadComments, drainQueuedInstruction, pushFailurePrompt]);
+
+  // Keep the ref pointing at the latest handler so the stable onEvent closure
+  // always invokes fresh state/deps.
+  useEffect(() => {
+    handleTermRef.current = handleRunTerminated;
+  }, [handleRunTerminated]);
+
+  // Orphan recovery: on mount, mark any in_progress task whose run is no
+  // longer active as failed, then surface any queued instructions stranded by
+  // a crash/close mid-run.
+  useEffect(() => {
+    let cancelled = false;
+    const recover = async () => {
+      try {
+        const [activeRuns, tasksNow] = await Promise.all([
+          window.cerebro.agent.activeRuns(),
+          window.cerebro.invoke({ method: 'GET', path: '/tasks' }),
+        ]);
+        if (cancelled || !tasksNow.ok) return;
+        const activeRunIds = new Set(activeRuns.map((r) => r.runId));
+        const list = tasksNow.data as Task[];
+
+        const staleRuns = list.filter(
+          (t) => t.column === 'in_progress' && t.run_id && !activeRunIds.has(t.run_id),
+        );
+        if (staleRuns.length > 0) {
+          await Promise.all(staleRuns.map((t) =>
+            window.cerebro.invoke({
+              method: 'POST',
+              path: `/tasks/${t.id}/run-event`,
+              body: {
+                type: 'run_failed',
+                run_id: t.run_id,
+                error: 'Run was interrupted by app restart',
+              },
+            }).catch(() => { /* noop */ }),
+          ));
+        }
+
+        if (cancelled) return;
+
+        const refreshed = staleRuns.length > 0
+          ? await window.cerebro.invoke({ method: 'GET', path: '/tasks' })
+          : tasksNow;
+        if (cancelled) return;
+        const refreshedList = refreshed.ok ? (refreshed.data as Task[]) : list;
+
+        // Scan all terminally-stated tasks in parallel for a pending queued comment.
+        const scanTargets = refreshedList.filter(
+          (t) => !(t.column === 'in_progress' && t.run_id && activeRunIds.has(t.run_id)),
+        );
+        const scans = await Promise.all(
+          scanTargets.map(async (t) => {
+            try {
+              const comments = await loadComments(t.id);
+              const pending = comments.find((c) => c.queue_status === 'pending') ?? null;
+              return pending ? { task: t, pending } : null;
+            } catch {
+              return null;
+            }
+          }),
+        );
+
+        if (cancelled) return;
+
+        for (const entry of scans) {
+          if (cancelled || !entry) continue;
+          const { task: t, pending } = entry;
+          if (t.column === 'to_review' || t.column === 'completed') {
+            await drainQueuedInstruction(t, pending);
+          } else {
+            pushFailurePrompt({
+              taskId: t.id,
+              taskTitle: t.title,
+              comment: pending,
+              targetExpertId: pending.pending_expert_id ?? t.expert_id,
+              failureReason: t.last_error ?? 'Run did not complete successfully',
+            });
+          }
+        }
+
+        if (!cancelled && staleRuns.length > 0) await loadTasks();
+      } catch (err) {
+        console.warn('[task] Orphan recovery failed:', err);
+      }
+    };
+    recover();
+    return () => { cancelled = true; };
+  }, [loadTasks, loadComments, drainQueuedInstruction, pushFailurePrompt]);
+
+  const confirmFailurePrompt = useCallback(async (taskId: string) => {
+    const prompt = pendingFailurePrompts.find((p) => p.taskId === taskId);
+    if (!prompt) return;
+    const taskRes = await window.cerebro.invoke({ method: 'GET', path: `/tasks/${taskId}` });
+    if (!taskRes.ok) return;
+    // Drop the prompt only after fetch succeeds — else a failed fetch would
+    // orphan the queued comment with no way to retry.
+    setPendingFailurePrompts((prev) => prev.filter((p) => p.taskId !== taskId));
+    await drainQueuedInstruction(taskRes.data as Task, prompt.comment);
+  }, [pendingFailurePrompts, drainQueuedInstruction]);
+
+  const dismissFailurePrompt = useCallback(async (taskId: string) => {
+    const prompt = pendingFailurePrompts.find((p) => p.taskId === taskId);
+    if (!prompt) return;
+    await discardQueuedInstruction(taskId, prompt.comment.id);
+  }, [pendingFailurePrompts, discardQueuedInstruction]);
+
+  const sendInstruction = useCallback(async (
+    taskId: string,
+    instruction: string,
+    targetExpertId: string | null,
+  ) => {
+    // Re-fetch — the local list lags real-time run state, and the queue-vs-spawn
+    // decision hinges on whether a run is active right now.
+    const freshRes = await window.cerebro.invoke({
+      method: 'GET',
+      path: `/tasks/${taskId}`,
+    });
+    if (!freshRes.ok) throw new Error(`Task ${taskId} not found`);
+    const task = freshRes.data as Task;
+
+    const isRunning = task.column === 'in_progress' && !!task.run_id;
+    const needsReassign = !!targetExpertId && targetExpertId !== task.expert_id;
+
+    if (isRunning) {
+      // Queue path — no agent.run, reassign deferred to drain time.
+      const res = await window.cerebro.invoke({
+        method: 'POST',
+        path: `/tasks/${taskId}/comments`,
+        body: {
+          kind: 'instruction',
+          body_md: instruction,
+          queue_status: 'pending',
+          pending_expert_id: needsReassign ? targetExpertId : null,
+        },
+      });
+      if (!res.ok) {
+        const detail = (res.data as { detail?: string } | null)?.detail;
+        throw new Error(detail || 'Failed to queue instruction');
+      }
+      await loadTasks();
+      return;
+    }
+
+    if (needsReassign) {
+      await updateTask(taskId, { expert_id: targetExpertId! });
+    }
+    const workingTask: Task = needsReassign
+      ? { ...task, expert_id: targetExpertId }
+      : task;
+
+    // Persist the instruction comment before spawning so the thread shows it
+    // immediately and the record survives a spawn failure.
+    const newCommentRes = await window.cerebro.invoke({
+      method: 'POST',
+      path: `/tasks/${taskId}/comments`,
+      body: { kind: 'instruction', body_md: instruction },
+    });
+    const newCommentId: string | null =
+      newCommentRes.ok && newCommentRes.data ? (newCommentRes.data as TaskComment).id : null;
+
+    await spawnFollowUpRun(workingTask, instruction, newCommentId);
+    await loadTasks();
+  }, [updateTask, spawnFollowUpRun, loadTasks]);
 
   const addComment = useCallback(async (taskId: string, kind: string, bodyMd: string): Promise<TaskComment> => {
     const res = await window.cerebro.invoke({
@@ -561,6 +858,10 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         cancelTask,
         startTask,
         sendInstruction,
+        discardQueuedInstruction,
+        pendingFailurePrompts,
+        confirmFailurePrompt,
+        dismissFailurePrompt,
         loadComments,
         addComment,
         addChecklistItem,

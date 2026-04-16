@@ -189,3 +189,72 @@ test('task cancellation works', async () => {
     expect(statusText).not.toMatch(/Running/i);
   }
 });
+
+// ─── Regression: re-run must not prematurely complete ────────────
+//
+// Repro for the "tasks prematurely marked to_review" bug. When a task is
+// re-run via --resume, Claude Code's TUI re-renders the full prior
+// conversation. That historical echo can contain a <deliverable> block,
+// which — if scanned — falsely trips completion detection before the
+// agent has done any new work. Verifies:
+//   1. The first run actually finishes with a real deliverable (completes).
+//   2. After clicking Re-run, the task re-enters Running state and STAYS
+//      running for at least 10s (proving completion detection isn't
+//      misfiring on the replayed history).
+//   3. The re-run eventually completes with a fresh deliverable.
+
+test('re-run does not prematurely mark task as done (resume regression)', async () => {
+  await createTask(page, {
+    goal: 'Write a one-paragraph markdown note titled "Hello". Keep it under 40 words.',
+  });
+
+  const first = await waitForTaskCompletion(page, 3 * 60_000);
+  await screenshot(page, 'rerun-first-done');
+  expect(first).toBe('completed');
+
+  // Task is now in to_review with a deliverable. Click Re-run.
+  // "Re-run" button lives in the task detail header for to_review tasks.
+  const rerunBtn = page.locator('button').filter({ hasText: /^Re-run$/i });
+  await expect(rerunBtn.first()).toBeVisible({ timeout: 5_000 });
+  await rerunBtn.first().click();
+
+  // Give the run a moment to register.
+  await page.waitForTimeout(2000);
+
+  // The status should now read Running (not Completed). If the bug is
+  // present, the task would flash Running → Completed almost immediately
+  // because the historical <deliverable> in the replayed TUI triggers
+  // completion on the first text chunk.
+  const detailHeader = page.locator('div.border-b:has(h2)');
+  const statusSpan = detailHeader.locator('span:has(> span.rounded-full)');
+  const statusAt2s = (await statusSpan.first().innerText()).trim();
+  await screenshot(page, 'rerun-after-2s');
+
+  // Must still be running at this point.
+  expect(statusAt2s).toMatch(/Running|Planning|Clarifying/i);
+
+  // Poll for 15s. The task must stay in Running state — if it flips to
+  // Completed within 15s we've prematurely completed on echo.
+  const start = Date.now();
+  let flippedEarly = false;
+  while (Date.now() - start < 15_000) {
+    const s = (await statusSpan.first().innerText()).trim();
+    if (/Completed/i.test(s)) {
+      // Claude can genuinely finish a trivial task quickly, but NOT in under
+      // 15s when resuming a workspace — the TUI render alone takes ~2s and a
+      // real new turn needs model latency. If we see Completed this fast it's
+      // almost certainly the echo bug.
+      flippedEarly = true;
+      break;
+    }
+    await page.waitForTimeout(1000);
+  }
+
+  await screenshot(page, 'rerun-15s-later');
+  expect(flippedEarly).toBe(false);
+
+  // Now wait for the real re-run to finish.
+  const second = await waitForTaskCompletion(page, 3 * 60_000);
+  await screenshot(page, 'rerun-done');
+  expect(second).toBe('completed');
+});

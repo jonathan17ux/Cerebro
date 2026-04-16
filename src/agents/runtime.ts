@@ -35,6 +35,24 @@ import { buildSystemPrompt } from '../i18n/language-directive';
 /** Cap concurrent runs to prevent spawning a wall of subprocesses. */
 const MAX_CONCURRENT_RUNS = 5;
 
+const DELIVERABLE_EXAMPLE = `<deliverable kind="markdown|code_app|mixed" title="Short title">
+# Heading
+
+Full markdown body here. For code_app, include: overview, file structure, setup commands, run command, notes. This is what the user sees in the Deliverable tab.
+</deliverable>`;
+
+const RUN_INFO_EXAMPLE = `<run_info>
+{
+  "preview_type": "web|expo|cli|static",
+  "setup_commands": ["npm install"],
+  "start_command": "npm run dev",
+  "preview_url_pattern": "Local:\\\\s+(https?://\\\\S+)",
+  "notes": "optional"
+}
+</run_info>`;
+
+const DELIVERABLE_HARD_RULE = `**ALWAYS end with a \`<deliverable>…</deliverable>\` block.** Cerebro uses this sentinel to mark the task complete — without it, the task will stay stuck in progress or be marked as an error. This is non-negotiable, even for trivial tasks.`;
+
 interface ActiveRun {
   runId: string;
   conversationId: string;
@@ -214,10 +232,15 @@ ${content}
 
 4. If you plan phases, emit a \`<plan>\` block. If not, skip straight to editing and synthesizing.
 
-5. After all changes, emit a new \`<deliverable>\` block with the COMPLETE updated deliverable (not just the diff — the full final version). For code_app, also emit an updated \`<run_info>\` block if the run command changed.
+5. After all changes, emit a new deliverable block with the COMPLETE updated deliverable (not just the diff — the full final version):
+
+${DELIVERABLE_EXAMPLE}
+
+For \`code_app\` or \`mixed\`, also emit an updated \`<run_info>\` block immediately after if the run command changed.
 
 ## Hard rules
 
+- ${DELIVERABLE_HARD_RULE}
 - NEVER ask the user for clarification, confirmation, or approval.
 - NEVER write outside the workspace directory.
 - NEVER spawn long-running dev servers or background processes.
@@ -260,24 +283,12 @@ Before synthesis, run a bounded verification command (e.g. \`npm install\` + \`n
 ### 5. Synthesize
 Emit the final deliverable block. For \`markdown\`: a standalone markdown artifact. For \`code_app\`: a README-style summary of what was built, structure, and how to run it. For \`mixed\`: both in one block.
 
-<deliverable kind="markdown|code_app|mixed" title="Short title">
-# Heading
-
-Full markdown body here. For code_app, include: overview, file structure, setup commands, run command, notes. This is what the user sees in the Deliverable tab.
-</deliverable>
+${DELIVERABLE_EXAMPLE}
 
 ### 6. For code_app or mixed: emit run info
 Immediately after the \`<deliverable>\` block, emit exactly one \`<run_info>\` block describing how to run the app. The UI uses this to wire the "Start dev server" button.
 
-<run_info>
-{
-  "preview_type": "web|expo|cli|static",
-  "setup_commands": ["npm install"],
-  "start_command": "npm run dev",
-  "preview_url_pattern": "Local:\\\\s+(https?://\\\\S+)",
-  "notes": "Scan the QR code with Expo Go on your phone."
-}
-</run_info>
+${RUN_INFO_EXAMPLE}
 
 - \`preview_type\`: \`web\` (dev server emits a URL), \`expo\` (Metro bundler + QR code), \`cli\` (non-interactive, runs and exits), \`static\` (just open index.html).
 - \`preview_url_pattern\`: Python-style regex with one capture group that extracts the URL from stdout.
@@ -292,6 +303,31 @@ Immediately after the \`<deliverable>\` block, emit exactly one \`<run_info>\` b
 - NEVER spawn a long-running dev server or background process — use bounded commands only.
 - If the plan is genuinely impossible or needs info only the user has, skip remaining items and explain inside a \`<deliverable kind="markdown">\` block.
 </task_execute>`;
+    } else if (isTaskRun && request.taskPhase === 'direct' && request.resumeSessionId) {
+      fullPrompt = `<task_resume>
+You previously started this task but did not finish with a \`<deliverable>\` block. Your file state and conversation context are preserved.
+
+## Brief (for reference)
+
+${content}
+
+## Protocol
+
+1. Review what you already did and finish any remaining work.
+2. When done (even if the work was already complete), you MUST emit a single deliverable block summarizing the final result:
+
+${DELIVERABLE_EXAMPLE}
+
+3. For \`code_app\` or \`mixed\` deliverables, immediately follow with a \`<run_info>\` block:
+
+${RUN_INFO_EXAMPLE}
+
+## Hard rules
+
+- ${DELIVERABLE_HARD_RULE}
+- If the previous run already completed the work but simply stopped before emitting the deliverable, emit it NOW based on what you built. Do not redo the work.
+- NEVER ask the user for clarification.
+</task_resume>`;
     } else if (isTaskRun && request.taskPhase === 'direct') {
       const wsPath = request.workspacePath ?? '$PWD';
       const workspaceDescription = isExternalWorkspace
@@ -312,12 +348,21 @@ ${content}
 1. Execute the task completely in the workspace directory (\`${wsPath}\`). No PLAN.md required — the title, description, checklist, and any prior instructions above ARE the spec.
 2. Work directly: create files, install dependencies, verify things compile with a bounded command (e.g. \`npm run build\`, \`npx tsc --noEmit\`). Do NOT spawn long-running dev servers — the UI handles that post-completion.
 3. For each checklist item, complete it before moving on. You may delegate phases to other experts via the \`Agent\` tool when specialist expertise helps.
-4. When finished, emit a single deliverable block summarizing what you built. The block opens with \`<\` + \`deliverable kind="markdown|code_app|mixed" title="Short title">\` and closes with the matching \`</\` + \`deliverable>\` tag. The body is markdown — for code_app, include overview, file structure, setup + run commands, notes.
+4. When finished, emit a single deliverable block summarizing what you built:
 
-5. For \`code_app\` or \`mixed\` deliverables, immediately follow with a run_info block (opens with \`<\` + \`run_info>\`, closes with \`</\` + \`run_info>\`) containing JSON with these keys: \`preview_type\` (one of: web, expo, cli, static), \`setup_commands\` (array), \`start_command\` (string), \`preview_url_pattern\` (regex with one capture group), \`notes\` (optional string).
+${DELIVERABLE_EXAMPLE}
+
+5. For \`code_app\` or \`mixed\` deliverables, immediately follow with a run_info block describing how to run the app:
+
+${RUN_INFO_EXAMPLE}
+
+- \`preview_type\`: \`web\` (dev server emits a URL), \`expo\` (Metro bundler + QR code), \`cli\` (non-interactive, runs and exits), \`static\` (just open index.html).
+- \`preview_url_pattern\`: Python-style regex with one capture group that extracts the URL from stdout.
+- Omit this block entirely for \`markdown\`-only deliverables.
 
 ## Hard rules
 
+- ${DELIVERABLE_HARD_RULE}
 - NEVER ask the user for clarification — interpret the brief and execute.
 - NEVER write outside the workspace directory.
 - NEVER spawn long-running dev servers or background processes here.
@@ -411,6 +456,16 @@ ${externalProjectCaution}- If a request is genuinely impossible, emit a markdown
       let completionDetected = false;
       let gracefulExitInitiated = false;
 
+      // On --resume, Claude Code re-renders the FULL prior conversation in the
+      // TUI, including any <deliverable> block from the previous attempt. That
+      // historical echo would falsely trigger completion the instant it scrolls
+      // past. Solution: track the offset into accumulatedText where "new" output
+      // begins, and only scan from there. We advance the offset on resume once
+      // the PTY text stream has been idle for 2s (TUI history done rendering).
+      let completionScanOffset = 0;
+      let resumeSettled = !request.resumeSessionId;
+      let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
       ptyRunner.on('data', (data: string) => {
         this.terminalBufferStore.append(runId, data);
         if (!webContents.isDestroyed()) {
@@ -427,10 +482,29 @@ ${externalProjectCaution}- If a request is genuinely impossible, emit a markdown
           } as RendererAgentEvent);
         }
 
-        // Match a complete deliverable block (opening tag with attributes + closing tag).
-        // Requiring both tags avoids false positives from stray text and ensures the
-        // agent has actually emitted its deliverable (not just mentioned it).
-        if (!completionDetected && /<deliverable\b[^>]*>[\s\S]*?<\/deliverable>/i.test(activeRun.accumulatedText)) {
+        if (!resumeSettled) {
+          if (settleTimer) clearTimeout(settleTimer);
+          settleTimer = setTimeout(() => {
+            completionScanOffset = activeRun.accumulatedText.length;
+            resumeSettled = true;
+          }, 2000);
+          return;
+        }
+
+        // Match a complete deliverable block with a CONCRETE kind value. The
+        // prompt itself contains `<deliverable kind="markdown|code_app|mixed">`
+        // example blocks that the TUI echoes into the terminal; requiring a
+        // single real kind value prevents those placeholder echoes from
+        // triggering premature completion. Bound the scan to a rolling tail
+        // (deliverable blocks are well under 16KB) so long runs don't pay
+        // O(n²) slicing the full transcript on every PTY chunk.
+        const scanStart = Math.max(completionScanOffset, activeRun.accumulatedText.length - 16384);
+        const scanWindow = activeRun.accumulatedText.slice(scanStart);
+        if (
+          !completionDetected &&
+          scanWindow.includes('</deliverable>') &&
+          /<deliverable\b[^>]*?\bkind=["'](?:markdown|code_app|mixed)["'][^>]*>[\s\S]*?<\/deliverable>/i.test(scanWindow)
+        ) {
           completionDetected = true;
           // Allow 3s for <run_info> to follow the deliverable, then ask Claude
           // Code to exit cleanly; if it doesn't, force-abort after another 5s.
@@ -474,6 +548,7 @@ ${externalProjectCaution}- If a request is genuinely impossible, emit a markdown
       ipcMain.on(IPC_CHANNELS.TASK_TERMINAL_INPUT, inputHandler);
 
       ptyRunner.on('exit', (code: number, signal?: string) => {
+        if (settleTimer) clearTimeout(settleTimer);
         ipcMain.removeListener(IPC_CHANNELS.TASK_TERMINAL_RESIZE, resizeHandler);
         ipcMain.removeListener(IPC_CHANNELS.TASK_TERMINAL_INPUT, inputHandler);
         this.terminalBufferStore.flush(runId);
@@ -483,13 +558,18 @@ ${externalProjectCaution}- If a request is genuinely impossible, emit a markdown
 
         // node-pty on macOS can report signal as 0 (number) for normal exits.
         const realSignal = signal && signal !== '0' && signal !== 'undefined' ? signal : null;
-        // If we already saw a deliverable, treat any exit as a successful completion
-        // (the non-zero exit code is just from our /exit sequence).
-        const isError = !completionDetected && ((code !== 0 && code !== null) || realSignal != null);
+        // A run only succeeds if we actually saw a <deliverable> block. Claude
+        // Code can exit code 0 on its own after finishing a turn — without a
+        // deliverable that means the model stopped early or ran out of turns,
+        // NOT that the task was completed. Treat that as an error so cards
+        // never falsely transition to to_review.
+        const isError = !completionDetected;
         if (isError) {
           const detail = realSignal
-            ? `Claude Code was killed (${realSignal})`
-            : `Claude Code exited with code ${code}`;
+            ? `Agent was killed (${realSignal}) before emitting a deliverable. Re-run to resume the session.`
+            : code !== 0 && code !== null
+              ? `Agent exited with code ${code} before emitting a deliverable. Re-run to resume the session.`
+              : 'Agent stopped before emitting a deliverable (may have run out of turns). Re-run to resume the session.';
           if (!webContents.isDestroyed()) {
             webContents.send(channel, { type: 'error', runId, error: detail } as RendererAgentEvent);
           }
