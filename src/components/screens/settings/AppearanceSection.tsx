@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import Toggle from '../../ui/Toggle';
 import { loadSetting, saveSetting } from '../../../lib/settings';
+import { useTheme, type Theme } from '../../../context/ThemeContext';
 
 /** Language options — autonym labels so users can always find their language. */
 const LANGUAGES = [
@@ -9,8 +10,15 @@ const LANGUAGES = [
   { code: 'es', label: 'Espa\u00f1ol' },
 ] as const;
 
+const THEMES: ReadonlyArray<{ value: Theme; labelKey: string }> = [
+  { value: 'light', labelKey: 'appearance.themeLight' },
+  { value: 'dark', labelKey: 'appearance.themeDark' },
+  { value: 'system', labelKey: 'appearance.themeSystem' },
+];
+
 export default function AppearanceSection() {
   const { t, i18n } = useTranslation();
+  const { theme, setTheme } = useTheme();
   const [showHistoricalLogs, setShowHistoricalLogs] = useState(false);
 
   useEffect(() => {
@@ -35,6 +43,27 @@ export default function AppearanceSection() {
     <div>
       <h2 className="text-base font-semibold text-text-primary mb-1">{t('appearance.title')}</h2>
       <p className="text-xs text-text-secondary mb-6">{t('appearance.description')}</p>
+
+      {/* Theme selector */}
+      <div className="flex items-start justify-between gap-4 py-3 border-b border-white/[0.06]">
+        <div>
+          <p className="text-sm text-text-primary">{t('appearance.theme')}</p>
+          <p className="text-xs text-text-secondary mt-0.5">
+            {t('appearance.themeDesc')}
+          </p>
+        </div>
+        <select
+          value={theme}
+          onChange={(e) => setTheme(e.target.value as Theme)}
+          className="bg-bg-elevated text-text-primary text-sm rounded-md border border-border-subtle px-3 py-1.5 outline-none focus:border-accent cursor-pointer min-w-[140px]"
+        >
+          {THEMES.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {t(opt.labelKey)}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* Language selector */}
       <div className="flex items-start justify-between gap-4 py-3 border-b border-white/[0.06]">

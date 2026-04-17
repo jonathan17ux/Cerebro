@@ -11,12 +11,14 @@ import { ToastProvider } from './context/ToastContext';
 import { VoiceProvider } from './context/VoiceContext';
 import { SandboxProvider } from './context/SandboxContext';
 import { FeatureFlagsProvider } from './context/FeatureFlagsContext';
+import { ThemeProvider } from './context/ThemeContext';
 import AppLayout from './components/layout/AppLayout';
 import ToastContainer from './components/ui/Toast';
 
 function App() {
   return (
     <ToastProvider>
+      <ThemeProvider>
       <ProviderProvider>
         <SandboxProvider>
           <FeatureFlagsProvider>
@@ -40,6 +42,7 @@ function App() {
           </FeatureFlagsProvider>
         </SandboxProvider>
       </ProviderProvider>
+      </ThemeProvider>
       <ToastContainer />
     </ToastProvider>
   );

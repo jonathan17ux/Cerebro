@@ -841,6 +841,11 @@ const es: TranslationKeys = {
   appearance: {
     title: 'Apariencia',
     description: 'Personaliza c\u00f3mo se ve y se comporta Cerebro.',
+    theme: 'Tema',
+    themeDesc: 'Elige una apariencia clara, oscura o sincronizada con el sistema.',
+    themeLight: 'Claro',
+    themeDark: 'Oscuro',
+    themeSystem: 'Sistema',
     showHistoricalLogs: 'Mostrar registros hist\u00f3ricos de pasos',
     showHistoricalLogsDesc:
       'Muestra los registros paso a paso al ver ejecuciones pasadas de rutinas. Los registros siempre se graban \u2014 esto controla si aparecen en la interfaz.',

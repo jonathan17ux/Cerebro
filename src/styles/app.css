@@ -44,6 +44,27 @@
   --font-mono: 'Geist Mono', ui-monospace, monospace;
 }
 
+/* Light theme — Perplexity-inspired warm off-white. Overrides token vars;
+   utility classes resolve to var(--color-*) so components switch automatically. */
+html.light {
+  --color-bg-base: #fbfaf4;
+  --color-bg-surface: #f5f3eb;
+  --color-bg-elevated: #eeebe0;
+  --color-bg-hover: #e7e3d4;
+
+  --color-accent: #0891b2;
+  --color-accent-hover: #0e7490;
+  --color-accent-muted: rgba(8, 145, 178, 0.10);
+
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #4a4a4a;
+  --color-text-tertiary: #7a7a7a;
+
+  --color-border-subtle: #e7e3d4;
+  --color-border-default: #d6d2c4;
+  --color-border-accent: rgba(8, 145, 178, 0.4);
+}
+
 /* Global styles */
 html, body, #root {
   height: 100%;
@@ -276,6 +297,13 @@ body {
     linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
   background-size: 100% 100%, 48px 48px, 48px 48px;
+}
+
+html.light .canvas-grid {
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% 40%, rgba(8, 145, 178, 0.04) 0%, transparent 100%),
+    linear-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
 }
 
 /* Node entrance animation */

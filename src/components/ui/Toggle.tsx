@@ -16,8 +16,8 @@ export default function Toggle({ checked, onChange }: ToggleProps) {
     >
       <div
         className={clsx(
-          'absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform duration-200',
-          checked ? 'translate-x-[15px]' : 'translate-x-0.5',
+          'absolute top-0.5 w-3.5 h-3.5 rounded-full transition-transform duration-200',
+          checked ? 'translate-x-[15px] bg-white' : 'translate-x-0.5 bg-text-tertiary',
         )}
       />
     </button>

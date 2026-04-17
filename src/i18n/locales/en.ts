@@ -850,6 +850,11 @@ const en = {
   appearance: {
     title: 'Appearance',
     description: 'Customize how Cerebro looks and behaves.',
+    theme: 'Theme',
+    themeDesc: 'Choose a light, dark, or system-matched appearance.',
+    themeLight: 'Light',
+    themeDark: 'Dark',
+    themeSystem: 'System',
     showHistoricalLogs: 'Show historical step logs',
     showHistoricalLogsDesc:
       'Display step-by-step logs when viewing past routine runs. Logs are always recorded \u2014 this controls whether they appear in the UI.',
